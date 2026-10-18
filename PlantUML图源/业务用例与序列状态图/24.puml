@@ -1,0 +1,82 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 18
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam roundcorner 0
+skinparam dpi 170
+skinparam maxMessageSize 155
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantPadding 12
+skinparam sequenceBoxPadding 5
+skinparam sequence {
+ ParticipantBackgroundColor white
+ LifeLineBackgroundColor white
+ LifeLineBorderColor black
+ ActorBackgroundColor white
+ BoundaryBackgroundColor white
+ ControlBackgroundColor white
+ ArrowColor black
+}
+hide footbox
+skinparam monochrome false
+skinparam usecaseBackgroundColor #white
+skinparam rectangleBackgroundColor white
+skinparam classBackgroundColor #white
+skinparam actorBackgroundColor #white
+skinparam sequenceActorBackgroundColor #white
+skinparam noteBackgroundColor #white
+skinparam sequenceLifeLineBackgroundColor #white
+skinparam sequenceGroupBackgroundColor #white
+skinparam sequenceReferenceBackgroundColor #white
+skinparam sequenceReferenceHeaderBackgroundColor #white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图24  维护诊所与牙医安排分析序列图
+actor "管理人员" as A
+boundary "<u>:管理人员接口</u>" as B #DDEEF9
+control "<u>:维护诊所与牙医安排</u>\n<u>控制</u>" as C #D5EEE9
+participant "<u>:诊所</u>" as E #D5EEF0
+participant "<u>:牙医</u>" as F #FBE4CF
+participant "<u>:医生停诊时段</u>" as H #DDF1ED
+participant "<u>:出诊安排</u>" as G #DFEEF9
+A -> B : 提交诊所资料与出诊调整
+activate B #E0F0EE
+B -> C : 维护诊所与牙医安排(输入)
+activate C #E0F0EE
+C -> E : 校验并保存诊所资料
+activate E #E0F0EE
+deactivate E
+C -> F : 保存经人工核实的专业资料
+activate F #E0F0EE
+F -> G : 检查时段冲突并保存安排
+activate G #E0F0EE
+opt 临时停诊
+deactivate G
+ F -> H : 保存停诊时间及原因
+activate H #E0F0EE
+deactivate H
+ F -> G : 排除停诊区间并列出受影响安排
+activate G #E0F0EE
+deactivate G
+deactivate F
+ C -> E : 标记受影响预约为待协调
+activate E #E0F0EE
+end
+deactivate E
+deactivate C
+deactivate B
+@enduml

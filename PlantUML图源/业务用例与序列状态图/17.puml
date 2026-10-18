@@ -1,0 +1,67 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 18
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam roundcorner 0
+skinparam dpi 170
+skinparam maxMessageSize 155
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantPadding 12
+skinparam sequenceBoxPadding 5
+skinparam sequence {
+ ParticipantBackgroundColor white
+ LifeLineBackgroundColor white
+ LifeLineBorderColor black
+ ActorBackgroundColor white
+ BoundaryBackgroundColor white
+ ControlBackgroundColor white
+ ArrowColor black
+}
+hide footbox
+skinparam monochrome false
+skinparam usecaseBackgroundColor #white
+skinparam rectangleBackgroundColor white
+skinparam classBackgroundColor #white
+skinparam actorBackgroundColor #white
+skinparam sequenceActorBackgroundColor #white
+skinparam noteBackgroundColor #white
+skinparam sequenceLifeLineBackgroundColor #white
+skinparam sequenceGroupBackgroundColor #white
+skinparam sequenceReferenceBackgroundColor #white
+skinparam sequenceReferenceHeaderBackgroundColor #white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图17  取消或改约（取消基本路径）分析序列图
+actor "患者" as A
+boundary "<u>:患者接口</u>" as B #DDEEF9
+control "<u>:取消或改约</u>\n<u>控制</u>" as C #D5EEE9
+participant "<u>:预约就诊</u>" as E #DFEEF9
+participant "<u>:资源占用</u>" as F #DDF1E9
+A -> B : 提交取消原因
+activate B #E0F0EE
+B -> C : 取消预约(身份,编号,原因)
+activate C #E0F0EE
+C -> E : 核验归属与状态并取消
+activate E #E0F0EE
+E -> F : 释放本次占用
+activate F #E0F0EE
+deactivate F
+E -> E : 保存取消依据
+deactivate E
+deactivate C
+deactivate B
+@enduml

@@ -1,0 +1,72 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 18
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam roundcorner 0
+skinparam dpi 170
+skinparam maxMessageSize 155
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantPadding 12
+skinparam sequenceBoxPadding 5
+skinparam sequence {
+ ParticipantBackgroundColor white
+ LifeLineBackgroundColor white
+ LifeLineBorderColor black
+ ActorBackgroundColor white
+ BoundaryBackgroundColor white
+ ControlBackgroundColor white
+ ArrowColor black
+}
+hide footbox
+skinparam monochrome false
+skinparam usecaseBackgroundColor #white
+skinparam rectangleBackgroundColor white
+skinparam classBackgroundColor #white
+skinparam actorBackgroundColor #white
+skinparam sequenceActorBackgroundColor #white
+skinparam noteBackgroundColor #white
+skinparam sequenceLifeLineBackgroundColor #white
+skinparam sequenceGroupBackgroundColor #white
+skinparam sequenceReferenceBackgroundColor #white
+skinparam sequenceReferenceHeaderBackgroundColor #white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图28  维护设备与可用状态分析序列图
+actor "管理人员" as A
+boundary "<u>:管理人员接口</u>" as B #DDEEF9
+control "<u>:维护设备与可用状态</u>\n<u>控制</u>" as C #D5EEE9
+participant "<u>:诊疗资源</u>" as E #DDF1E9
+participant "<u>:不可用时段</u>" as F #DDF1E9
+participant "<u>:预约就诊</u>" as G #D5EEF0
+A -> B : 提交检查依据及停用时间
+activate B #E0F0EE
+B -> C : 维护设备与可用状态(输入)
+activate C #E0F0EE
+C -> E : 核验并登记停用
+activate E #E0F0EE
+E -> F : 保存不可用时段与原因
+activate F #E0F0EE
+deactivate F
+E -> E : 阻止停用期间新增占用
+deactivate E
+C -> G : 标记受影响预约为待协调
+activate G #E0F0EE
+note right of E : 人工确认恢复后才重新开放
+deactivate G
+deactivate C
+deactivate B
+@enduml

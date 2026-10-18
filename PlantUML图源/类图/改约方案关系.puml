@@ -1,0 +1,45 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor #A0A0A0
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+title 改约方案关系类图
+class "预约就诊" as A {
+时间、状态、事项
++确认预约()
++登记到诊()
+}
+class "改约方案" as XC {
+提出及答复时间、原因、状态
++登记答复()
++落实方案()
+}
+class "医生停诊时段" as XD {
+开始、结束、原因、状态
+}
+class "不可用时段" as U {
+开始、结束、原因
+}
+A "1" -down- "0..*" XC : 原预约
+A "1" -right- "0..1" XC : 候选预约
+XD "0..1" -down- "0..*" XC : 停诊原因
+U "0..1" -down- "0..*" XC : 资源原因
+legend bottom
+两条预约关联的角色不同：原预约可有多种方案，候选预约至多归属一份方案。
+已同意后仍须核验可用时段，成功落实后才释放原占用。
+endlegend
+@enduml

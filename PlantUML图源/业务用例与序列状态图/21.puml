@@ -1,0 +1,93 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 18
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam roundcorner 0
+skinparam dpi 170
+skinparam maxMessageSize 155
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantPadding 12
+skinparam sequenceBoxPadding 5
+skinparam sequence {
+ ParticipantBackgroundColor white
+ LifeLineBackgroundColor white
+ LifeLineBorderColor black
+ ActorBackgroundColor white
+ BoundaryBackgroundColor white
+ ControlBackgroundColor white
+ ArrowColor black
+}
+hide footbox
+skinparam monochrome false
+skinparam usecaseBackgroundColor #white
+skinparam rectangleBackgroundColor white
+skinparam classBackgroundColor #white
+skinparam actorBackgroundColor #white
+skinparam sequenceActorBackgroundColor #white
+skinparam noteBackgroundColor #white
+skinparam sequenceLifeLineBackgroundColor #white
+skinparam sequenceGroupBackgroundColor #white
+skinparam sequenceReferenceBackgroundColor #white
+skinparam sequenceReferenceHeaderBackgroundColor #white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图21 登记到诊与候诊分析序列图
+actor "前台人员" as A #DDF1ED
+boundary "<u>:前台接口</u>" as B #DDEEF9
+control "<u>:登记预约结局控制</u>" as C #D5EEE9
+participant "<u>:预约就诊</u>" as E #DFEEF9
+participant "<u>:候诊登记</u>" as Q #DDF1ED
+participant "<u>:叫号记录</u>" as R #DDF1ED
+participant "<u>:资源占用</u>" as F #DDF1E9
+A -> B : 提交签到或结局及依据
+activate B
+B -> C : 登记预约结局(输入)
+activate C
+C -> E : 核验状态与办理依据
+activate E
+alt 签到
+ E -> Q : 登记当日号码与候诊状态
+ activate Q
+ deactivate Q
+else 取消
+ E -> F : 释放本次占用
+ activate F
+ deactivate F
+end
+deactivate E
+deactivate C
+deactivate B
+opt 已签到患者办理叫号
+ A -> B : 提交叫号或回应结果
+ activate B
+ B -> C : 办理候诊呼叫(输入)
+ activate C
+ C -> Q : 核验候诊状态并办理呼叫
+ activate Q
+ Q -> R : 新建呼叫或登记本次回应
+ activate R
+ deactivate R
+ Q -> Q : 同步呼叫中或过号状态
+ deactivate Q
+ deactivate C
+ deactivate B
+end
+note over E,Q
+签到与建号同一事务；过号不等于未到。
+接诊或退出后停止叫号；回队复用原票。
+end note
+@enduml

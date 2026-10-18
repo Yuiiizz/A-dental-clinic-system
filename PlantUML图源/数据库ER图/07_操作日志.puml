@@ -1,0 +1,41 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor transparent
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 45
+skinparam ranksep 45
+skinparam dpi 150
+title 操作日志数据库 ER 图
+hide methods
+package "操作日志" #EAF5F2 {
+entity "操作日志\naudit_log" as audit_log {
+{field} [<color:#176CA4><b>PK</b></color>] audit_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] actor_account_id\n  <color:#218653>→ account.account_id ?</color>
+}
+}
+package "其他模块引用  同名表为同一张表" #EAF3F8 {
+entity "登录账号\naccount" as account {
+{field} [<color:#176CA4><b>PK</b></color>] account_id\n  <color:#777777>bigint</color>
+}
+}
+' FK audit_log.actor_account_id > account.account_id
+account |o--o{ audit_log
+legend bottom
+蓝色 PK：主键；绿色 FK：外键；蓝灰色 UQ：单列唯一。多个 PK 字段共同组成联合主键。
+PK 主键   FK 外键   UQ 唯一   ? 可空
+字段下方的 → 指向被引用表及主键。
+图示全部主外键；完整业务字段见数据字典。
+endlegend
+@enduml

@@ -1,0 +1,87 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor transparent
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 45
+skinparam ranksep 45
+skinparam dpi 150
+title 人员与账号数据库 ER 图
+hide methods
+package "人员与账号" #EAF5F2 {
+entity "工作人员\nstaff" as staff {
+{field} [<color:#176CA4><b>PK</b></color>] staff_id\n  <color:#777777>bigint</color>
+}
+entity "人员资格\ncredential" as credential {
+{field} [<color:#176CA4><b>PK</b></color>] credential_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] staff_id\n  <color:#218653>→ staff.staff_id</color>
+{field} [<color:#218653><b>FK</b></color>] verified_by\n  <color:#218653>→ staff.staff_id</color>
+}
+entity "登录账号\naccount" as account {
+{field} [<color:#176CA4><b>PK</b></color>] account_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] patient_id\n  <color:#218653>→ patient.patient_id ?</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] staff_id\n  <color:#218653>→ staff.staff_id ?</color>
+}
+entity "系统角色\nrole" as role {
+{field} [<color:#176CA4><b>PK</b></color>] role_id\n  <color:#777777>bigint</color>
+}
+entity "操作权限\npermission" as permission {
+{field} [<color:#176CA4><b>PK</b></color>] permission_id\n  <color:#777777>bigint</color>
+}
+entity "账号角色\naccount_role" as account_role {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] account_id\n  <color:#218653>→ account.account_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] role_id\n  <color:#218653>→ role.role_id</color>
+{field} [<color:#218653><b>FK</b></color>] granted_by\n  <color:#218653>→ account.account_id ?</color>
+}
+entity "角色权限\nrole_permission" as role_permission {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] role_id\n  <color:#218653>→ role.role_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] permission_id\n  <color:#218653>→ permission.permission_id</color>
+}
+entity "登录会话\nauth_session" as auth_session {
+{field} [<color:#176CA4><b>PK</b></color>] session_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] account_id\n  <color:#218653>→ account.account_id</color>
+}
+}
+package "其他模块引用  同名表为同一张表" #EAF3F8 {
+entity "患者\npatient" as patient {
+{field} [<color:#176CA4><b>PK</b></color>] patient_id\n  <color:#777777>bigint</color>
+}
+}
+' FK credential.staff_id > staff.staff_id
+staff ||--o{ credential
+' FK credential.verified_by > staff.staff_id
+staff ||--o{ credential
+' FK account.patient_id > patient.patient_id
+patient |o--o| account
+' FK account.staff_id > staff.staff_id
+staff |o--o| account
+' FK account_role.account_id > account.account_id
+account ||--o{ account_role
+' FK account_role.role_id > role.role_id
+role ||--o{ account_role
+' FK account_role.granted_by > account.account_id
+account |o--o{ account_role
+' FK role_permission.role_id > role.role_id
+role ||--o{ role_permission
+' FK role_permission.permission_id > permission.permission_id
+permission ||--o{ role_permission
+' FK auth_session.account_id > account.account_id
+account ||--o{ auth_session
+legend bottom
+蓝色 PK：主键；绿色 FK：外键；蓝灰色 UQ：单列唯一。多个 PK 字段共同组成联合主键。
+PK 主键   FK 外键   UQ 唯一   ? 可空
+字段下方的 → 指向被引用表及主键。
+图示全部主外键；完整业务字段见数据字典。
+endlegend
+@enduml

@@ -1,0 +1,56 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor #A0A0A0
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+title 图36  复诊与联系类图
+package "复诊与联系" #white {
+class "接诊记录" as V {
+本次健康核对、开始及完成时间
++登记核对()
++准备结算()
+}
+class "复诊计划" as H {
+建议日期、事项、状态
++关联后续预约()
+}
+class "预约就诊" as A {
+时间、状态、事项
++确认预约()
++登记到诊()
+}
+class "联系与提醒记录" as M {
+类型、渠道、时间、结果
+知晓时间与依据
++登记联系()
+}
+class "牙医" as D {
+执业标识
++确认诊疗事实()
++制定复诊建议()
+}
+}
+V "1" -down- "0..*" H : 来源
+D "1" -right- "0..*" H : 制定
+H "0..1" -down- "0..*" A : 后续预约
+H "0..1" -right- "0..*" M : 计划协调
+A "0..1" -right- "0..*" M : 预约联系
+legend bottom
+{xor} 每条联系记录恰好关联复诊计划或预约之一。
+每份计划可有历次预约，但同时至多一笔当前有效预约。
+endlegend
+@enduml

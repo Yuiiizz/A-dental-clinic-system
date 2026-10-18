@@ -1,0 +1,49 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor #A0A0A0
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+title 图34  诊疗资源与占用类图
+package "诊疗资源与占用" #white {
+class "诊所" as O {
+名称、地址、负责人
+}
+class "诊疗资源" as R {
+编号、类型、运行状态
++登记停用()
+}
+class "不可用时段" as U {
+开始、结束、原因
+}
+class "预约就诊" as A {
+时间、状态、事项
++确认预约()
++登记到诊()
+}
+class "资源占用" as B {
+开始、结束、状态
+}
+}
+O "1" -down- "0..*" R : 配置
+R "1" *-down- "0..*" U : 禁用时段
+R "1" -right- "0..*" B : 占用对象
+A "1" *-down- "0..*" B : 使用安排
+legend bottom
+确认牙椅诊疗预约必须落实有效牙椅占用。
+资源禁用时段映射不可用时段；占用不得与禁用或其他占用重叠。
+endlegend
+@enduml

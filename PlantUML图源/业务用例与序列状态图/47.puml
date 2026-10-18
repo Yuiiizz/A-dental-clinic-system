@@ -1,0 +1,59 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor transparent
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+skinparam sequenceLifeLineBackgroundColor white
+skinparam sequenceParticipantBackgroundColor white
+skinparam sequenceParticipantBorderColor black
+skinparam actorBackgroundColor white
+skinparam sequenceGroupBackgroundColor white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图47  角色授权分析序列图
+actor 系统管理员 as A
+boundary "<u>:账号管理接口</u>" as B
+control "<u>:授权控制</u>" as C
+participant "<u>:登录账号</u>" as K
+participant "<u>:账号角色</u>" as R
+participant "<u>:登录会话</u>" as S
+participant "<u>:操作日志</u>" as L
+A -> B : 提交目标账号、角色及批准依据
+B -> C : 申请调整角色
+C -> C : 校验操作者权限和禁止自行提权规则
+C -> K : 核验身份、在岗及版本
+C -> R : 校验角色适用条件并调整关联
+C -> K : 递增授权版本
+C -> S : 撤销旧会话
+C -> L : 追加授权审计
+note over C,L
+以上写入同一事务；校验失败不修改任何授权。
+临床角色须匹配牙医身份；业务负责人审批依据须留存。
+end note
+@enduml

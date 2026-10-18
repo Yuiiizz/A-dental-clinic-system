@@ -1,0 +1,50 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 17
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam componentBackgroundColor white
+skinparam componentBorderColor black
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam databaseBackgroundColor white
+skinparam databaseBorderColor black
+skinparam ArrowColor black
+skinparam linetype ortho
+skinparam dpi 160
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 两端与共享后台结构
+component "患者服务端\n移动浏览器入口" as P
+component "诊所管理端\n按岗位显示工作台" as M
+package "后台服务" {
+ component "患者接口\n/patient" as PA
+ component "管理接口\n/admin" as MA
+ component "身份与权限校验\n操作权限＋数据范围" as AU
+ component "业务应用服务\n预约资源、候诊、诊疗费用、复诊联系" as B
+ component "持久化访问" as R
+}
+database "共享业务数据库\nPostgreSQL" as DB
+P -down-> PA
+M -down-> MA
+PA -down-> AU
+MA -down-> AU
+AU -down-> B : 授权通过
+B -down-> R : 事务内读写
+R -down-> DB
+P -[hidden]right- M
+PA -[hidden]right- MA
+@enduml

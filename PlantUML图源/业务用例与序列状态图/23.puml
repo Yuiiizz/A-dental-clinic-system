@@ -1,0 +1,86 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 18
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam roundcorner 0
+skinparam dpi 170
+skinparam maxMessageSize 155
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantPadding 12
+skinparam sequenceBoxPadding 5
+skinparam sequence {
+ ParticipantBackgroundColor white
+ LifeLineBackgroundColor white
+ LifeLineBorderColor black
+ ActorBackgroundColor white
+ BoundaryBackgroundColor white
+ ControlBackgroundColor white
+ ArrowColor black
+}
+hide footbox
+skinparam monochrome false
+skinparam usecaseBackgroundColor #white
+skinparam rectangleBackgroundColor white
+skinparam classBackgroundColor #white
+skinparam actorBackgroundColor #white
+skinparam sequenceActorBackgroundColor #white
+skinparam noteBackgroundColor #white
+skinparam sequenceLifeLineBackgroundColor #white
+skinparam sequenceGroupBackgroundColor #white
+skinparam sequenceReferenceBackgroundColor #white
+skinparam sequenceReferenceHeaderBackgroundColor #white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图23  生成结算单分析序列图
+actor "前台人员" as A
+boundary "<u>:前台接口</u>" as B #DDEEF9
+control "<u>:生成结算单</u>\n<u>控制</u>" as C #D5EEE9
+participant "<u>:接诊记录</u>" as E #DFEEF9
+participant "<u>:诊疗项目记录</u>" as F #FFF0CF
+participant "<u>:结算单</u>" as G #FFF0CF
+A -> B : 申请本次结算
+activate B #E0F0EE
+B -> C : 生成结算单(预约编号)
+activate C #E0F0EE
+C -> E : 准备结算
+activate E #E0F0EE
+alt 已有有效结算单
+ E -> E : 提供原有效单
+else 就诊完成且有应结算项目
+ E -> F : 核验明细并形成值快照
+activate F #E0F0EE
+deactivate F
+ E -> G : 根据明细快照计算总额
+activate G #E0F0EE
+deactivate G
+deactivate E
+deactivate C
+deactivate B
+ A -> B : 核对后确认开单
+activate B #E0F0EE
+ B -> C : 确认开单(预约编号)
+activate C #E0F0EE
+ C -> E : 确认本次结算
+activate E #E0F0EE
+ E -> G : 保存本次单号、时间并置为有效
+activate G #E0F0EE
+end
+deactivate G
+deactivate E
+deactivate C
+deactivate B
+@enduml

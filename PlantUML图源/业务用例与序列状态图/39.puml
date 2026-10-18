@@ -1,0 +1,45 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 17
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam ArrowColor black
+skinparam classBorderColor black
+skinparam classBackgroundColor #white
+skinparam classAttributeIconSize 0
+skinparam noteBackgroundColor #white
+skinparam noteBorderColor black
+skinparam stateBackgroundColor #white
+skinparam stateBorderColor black
+skinparam stateArrowColor black
+skinparam dpi 160
+skinparam nodesep 55
+skinparam ranksep 55
+hide circle
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图39  预约就诊正常履约状态机图
+
+state "待确认" as P
+state "已确认" as C #DDF1E9
+state "候诊中" as W
+state "接诊中" as V
+state "已完成" as F #DDF1E9
+[*] --> P
+P -right-> C : 确认\n[可接诊且患者同意]\n/ 保存安排与占用
+C -down-> W : 签到\n[身份相符]\n/ 记录时间
+W -left-> V : 接诊\n[权限有效]\n/ 登记接诊人
+V -down-> F : 完成\n[记录完整]\n/ 保存依据
+@enduml

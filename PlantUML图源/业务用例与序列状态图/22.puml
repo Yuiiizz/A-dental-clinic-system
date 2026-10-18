@@ -1,0 +1,104 @@
+@startuml
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 18
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam roundcorner 0
+skinparam dpi 170
+skinparam maxMessageSize 155
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantPadding 12
+skinparam sequenceBoxPadding 5
+skinparam sequence {
+ ParticipantBackgroundColor white
+ LifeLineBackgroundColor white
+ LifeLineBorderColor black
+ ActorBackgroundColor white
+ BoundaryBackgroundColor white
+ ControlBackgroundColor white
+ ArrowColor black
+}
+hide footbox
+skinparam monochrome false
+skinparam usecaseBackgroundColor #white
+skinparam rectangleBackgroundColor white
+skinparam classBackgroundColor #white
+skinparam actorBackgroundColor #white
+skinparam sequenceActorBackgroundColor #white
+skinparam noteBackgroundColor #white
+skinparam sequenceLifeLineBackgroundColor #white
+skinparam sequenceGroupBackgroundColor #white
+skinparam sequenceReferenceBackgroundColor #white
+skinparam sequenceReferenceHeaderBackgroundColor #white
+
+skinparam usecaseBackgroundColor #DDEEF9
+skinparam actorBackgroundColor #FBE4CF
+skinparam sequenceActorBackgroundColor #FBE4CF
+skinparam sequenceParticipantBackgroundColor #DDF1ED
+skinparam sequenceLifeLineBackgroundColor #E0F0EE
+skinparam sequenceGroupBackgroundColor #DFEEF5
+skinparam sequenceReferenceBackgroundColor #E0F1EC
+skinparam sequenceReferenceHeaderBackgroundColor #D5EAE5
+skinparam noteBackgroundColor #FFF5DF
+skinparam stateBackgroundColor #DDF1ED
+skinparam componentBackgroundColor #DDF1ED
+skinparam databaseBackgroundColor #DDEEF9
+
+title 图22  核对健康信息与登记治疗分析序列图
+actor "牙医" as A
+boundary "<u>:牙医接口</u>" as B #DDEEF9
+control "<u>:登记治疗控制</u>" as C #D5EEE9
+participant "<u>:预约就诊</u>" as P #DFEEF9
+participant "<u>:接诊记录</u>" as V #DDF1E9
+participant "<u>:诊疗项目记录</u>" as I #FFF0CF
+A -> B : 提交接诊与健康核对结果
+activate B #E0F0EE
+deactivate B
+B -> C : 登记接诊(输入)
+activate C #E0F0EE
+deactivate C
+C -> P : 核验安排并开始接诊
+activate P #E0F0EE
+deactivate P
+P -> V : 建立接诊与健康核对快照
+activate V #E0F0EE
+deactivate V
+A -> B : 提交逐项告知及患者确认
+activate B #E0F0EE
+deactivate B
+B -> C : 登记告知(输入)
+activate C #E0F0EE
+deactivate C
+C -> V : 登记本次诊疗项目
+activate V #E0F0EE
+deactivate V
+V -> I : 保存预计数量、告知价及确认依据
+activate I #E0F0EE
+deactivate I
+A -> B : 提交实际实施结果
+activate B #E0F0EE
+deactivate B
+B -> C : 确认治疗(输入)
+activate C #E0F0EE
+deactivate C
+C -> V : 核验本次实施记录
+activate V #E0F0EE
+deactivate V
+V -> I : 校验确认依据并保存实际数量价格
+activate I #E0F0EE
+deactivate I
+A -> B : 确认本次就诊完成
+activate B #E0F0EE
+deactivate B
+B -> C : 完成就诊
+activate C #E0F0EE
+deactivate C
+C -> V : 核验完整性并记录完成时间
+activate V #E0F0EE
+deactivate V
+C -> P : 确认预约履约完成
+activate P #E0F0EE
+deactivate P
+
+@enduml

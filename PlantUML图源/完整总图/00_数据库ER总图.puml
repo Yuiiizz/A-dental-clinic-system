@@ -1,0 +1,520 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor #657575
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor transparent
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+skinparam minClassWidth 165
+skinparam backgroundColor #F2F2F2
+title A口腔诊所数据库 ER 总图
+hide methods
+skinparam nodesep 55
+skinparam ranksep 65
+package "身份与人员" as G0 #EAF3F8 {
+entity "工作人员\nstaff" as staff {
+{field} [<color:#176CA4><b>PK</b></color>] staff_id\n  <color:#777777>bigint</color>
+{field} name\n  <color:#777777>varchar(60)</color>
+{field} staff_type\n  <color:#777777>varchar(20)</color>
+{field} job_title\n  <color:#777777>varchar(60)</color>
+{field} [<color:#467DA6><b>UQ</b></color>] practice_no\n  <color:#777777>varchar(60) ?</color>
+{field} employment_state\n  <color:#777777>varchar(20)</color>
+}
+entity "人员资格\ncredential" as credential {
+{field} [<color:#176CA4><b>PK</b></color>] credential_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] staff_id\n  <color:#218653>→ staff.staff_id</color>
+{field} credential_type\n  <color:#777777>varchar(40)</color>
+{field} certificate_no\n  <color:#777777>varchar(80)</color>
+{field} valid_from\n  <color:#777777>date ?</color>
+{field} valid_to\n  <color:#777777>date ?</color>
+{field} [<color:#218653><b>FK</b></color>] verified_by\n  <color:#218653>→ staff.staff_id</color>
+{field} verified_at\n  <color:#777777>timestamp</color>
+}
+entity "患者\npatient" as patient {
+{field} [<color:#176CA4><b>PK</b></color>] patient_id\n  <color:#777777>bigint</color>
+{field} name\n  <color:#777777>varchar(60)</color>
+{field} birth_date\n  <color:#777777>date ?</color>
+{field} phone\n  <color:#777777>varchar(30)</color>
+{field} email\n  <color:#777777>varchar(120) ?</color>
+{field} emergency_name\n  <color:#777777>varchar(60) ?</color>
+{field} emergency_phone\n  <color:#777777>varchar(30) ?</color>
+{field} [<color:#218653><b>FK</b></color>] primary_dentist_id\n  <color:#218653>→ staff.staff_id ?</color>
+{field} allergy_status\n  <color:#777777>varchar(20)</color>
+{field} allergy_notes\n  <color:#777777>text ?</color>
+}
+entity "登录账号\naccount" as account {
+{field} [<color:#176CA4><b>PK</b></color>] account_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>] login_name\n  <color:#777777>varchar(100)</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] patient_id\n  <color:#218653>→ patient.patient_id ?</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] staff_id\n  <color:#218653>→ staff.staff_id ?</color>
+{field} enabled\n  <color:#777777>boolean</color>
+{field} password_hash\n  <color:#777777>varchar(255) ?</color>
+{field} must_change_password\n  <color:#777777>boolean</color>
+{field} auth_version\n  <color:#777777>integer</color>
+{field} created_at\n  <color:#777777>timestamp</color>
+}
+entity "操作日志\naudit_log" as audit_log {
+{field} [<color:#176CA4><b>PK</b></color>] audit_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] actor_account_id\n  <color:#218653>→ account.account_id ?</color>
+{field} actor_type\n  <color:#777777>varchar(20)</color>
+{field} target_type\n  <color:#777777>varchar(40)</color>
+{field} target_id\n  <color:#777777>bigint</color>
+{field} operation\n  <color:#777777>varchar(60)</color>
+{field} before_data\n  <color:#777777>text ?</color>
+{field} after_data\n  <color:#777777>text ?</color>
+{field} reason\n  <color:#777777>varchar(300) ?</color>
+{field} occurred_at\n  <color:#777777>timestamp</color>
+}
+entity "系统角色\nrole" as role {
+{field} [<color:#176CA4><b>PK</b></color>] role_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>] code\n  <color:#777777>varchar(30)</color>
+{field} name\n  <color:#777777>varchar(60)</color>
+{field} identity_type\n  <color:#777777>varchar(20)</color>
+}
+entity "操作权限\npermission" as permission {
+{field} [<color:#176CA4><b>PK</b></color>] permission_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>] code\n  <color:#777777>varchar(80)</color>
+{field} name\n  <color:#777777>varchar(80)</color>
+}
+entity "账号角色\naccount_role" as account_role {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] account_id\n  <color:#218653>→ account.account_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] role_id\n  <color:#218653>→ role.role_id</color>
+{field} [<color:#218653><b>FK</b></color>] granted_by\n  <color:#218653>→ account.account_id ?</color>
+{field} granted_at\n  <color:#777777>timestamp</color>
+{field} approval_basis\n  <color:#777777>varchar(300)</color>
+}
+entity "角色权限\nrole_permission" as role_permission {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] role_id\n  <color:#218653>→ role.role_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] permission_id\n  <color:#218653>→ permission.permission_id</color>
+}
+entity "登录会话\nauth_session" as auth_session {
+{field} [<color:#176CA4><b>PK</b></color>] session_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] account_id\n  <color:#218653>→ account.account_id</color>
+{field} [<color:#467DA6><b>UQ</b></color>] token_hash\n  <color:#777777>varchar(64)</color>
+{field} auth_version\n  <color:#777777>integer</color>
+{field} created_at\n  <color:#777777>timestamp</color>
+{field} last_seen_at\n  <color:#777777>timestamp</color>
+{field} expires_at\n  <color:#777777>timestamp</color>
+{field} revoked_at\n  <color:#777777>timestamp ?</color>
+}
+entity "主治交接记录\ndentist_assignment" as dentist_assignment {
+{field} [<color:#176CA4><b>PK</b></color>] assignment_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] patient_id\n  <color:#218653>→ patient.patient_id</color>
+{field} [<color:#218653><b>FK</b></color>] dentist_id\n  <color:#218653>→ staff.staff_id</color>
+{field} starts_at\n  <color:#777777>timestamp</color>
+{field} ends_at\n  <color:#777777>timestamp ?</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] previous_id\n  <color:#218653>→ dentist_assignment.assignment_id ?</color>
+{field} [<color:#218653><b>FK</b></color>] recorded_by\n  <color:#218653>→ staff.staff_id</color>
+{field} agreed_at\n  <color:#777777>timestamp</color>
+{field} agreement_basis\n  <color:#777777>varchar(300)</color>
+{field} reason\n  <color:#777777>varchar(300)</color>
+}
+}
+package "预约与资源" as G1 #EAF5F2 {
+entity "出诊安排\nschedule" as schedule {
+{field} [<color:#176CA4><b>PK</b></color>] schedule_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] dentist_id\n  <color:#218653>→ staff.staff_id</color>
+{field} starts_at\n  <color:#777777>timestamp</color>
+{field} ends_at\n  <color:#777777>timestamp</color>
+{field} service_type\n  <color:#777777>varchar(20)</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+}
+entity "预约就诊\nappointment" as appointment {
+{field} [<color:#176CA4><b>PK</b></color>] appointment_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] patient_id\n  <color:#218653>→ patient.patient_id</color>
+{field} [<color:#218653><b>FK</b></color>] schedule_id\n  <color:#218653>→ schedule.schedule_id ?</color>
+{field} [<color:#218653><b>FK</b></color>] intended_dentist_id\n  <color:#218653>→ staff.staff_id ?</color>
+{field} starts_at\n  <color:#777777>timestamp</color>
+{field} ends_at\n  <color:#777777>timestamp</color>
+{field} visit_type\n  <color:#777777>varchar(20)</color>
+{field} purpose\n  <color:#777777>varchar(200)</color>
+{field} special_needs\n  <color:#777777>varchar(300) ?</color>
+{field} channel\n  <color:#777777>varchar(20)</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} coordination_state\n  <color:#777777>varchar(20)</color>
+{field} [<color:#218653><b>FK</b></color>] previous_id\n  <color:#218653>→ appointment.appointment_id ?</color>
+{field} [<color:#218653><b>FK</b></color>] followup_plan_id\n  <color:#218653>→ followup_plan.plan_id ?</color>
+{field} confirmed_at\n  <color:#777777>timestamp ?</color>
+{field} checked_in_at\n  <color:#777777>timestamp ?</color>
+{field} consent_basis\n  <color:#777777>varchar(300) ?</color>
+{field} version\n  <color:#777777>integer</color>
+{field} [<color:#467DA6><b>UQ</b></color>] request_key\n  <color:#777777>varchar(64)</color>
+{field} request_hash\n  <color:#777777>varchar(64)</color>
+{field} [<color:#218653><b>FK</b></color>] requested_by\n  <color:#218653>→ account.account_id</color>
+{field} cancelled_by_type\n  <color:#777777>varchar(20) ?</color>
+{field} closure_reason\n  <color:#777777>varchar(300) ?</color>
+}
+entity "诊疗资源\nresource" as resource {
+{field} [<color:#176CA4><b>PK</b></color>] resource_id\n  <color:#777777>bigint</color>
+{field} name\n  <color:#777777>varchar(80)</color>
+{field} resource_type\n  <color:#777777>varchar(20)</color>
+{field} [<color:#218653><b>FK</b></color>] category_id\n  <color:#218653>→ resource_category.category_id</color>
+{field} operating_state\n  <color:#777777>varchar(20)</color>
+}
+entity "资源禁用时段\nresource_unavailable" as resource_unavailable {
+{field} [<color:#176CA4><b>PK</b></color>] unavailable_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] resource_id\n  <color:#218653>→ resource.resource_id</color>
+{field} starts_at\n  <color:#777777>timestamp</color>
+{field} ends_at\n  <color:#777777>timestamp</color>
+{field} reason\n  <color:#777777>varchar(200)</color>
+}
+entity "资源占用\nresource_booking" as resource_booking {
+{field} [<color:#176CA4><b>PK</b></color>] booking_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] appointment_id\n  <color:#218653>→ appointment.appointment_id</color>
+{field} [<color:#218653><b>FK</b></color>] resource_id\n  <color:#218653>→ resource.resource_id</color>
+{field} starts_at\n  <color:#777777>timestamp</color>
+{field} ends_at\n  <color:#777777>timestamp</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+}
+entity "医生停诊时段\ndentist_unavailable" as dentist_unavailable {
+{field} [<color:#176CA4><b>PK</b></color>] absence_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] dentist_id\n  <color:#218653>→ staff.staff_id</color>
+{field} starts_at\n  <color:#777777>timestamp</color>
+{field} ends_at\n  <color:#777777>timestamp</color>
+{field} reason\n  <color:#777777>varchar(300)</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} [<color:#218653><b>FK</b></color>] recorded_by\n  <color:#218653>→ staff.staff_id</color>
+{field} recorded_at\n  <color:#777777>timestamp</color>
+}
+entity "改约方案\nappointment_change" as appointment_change {
+{field} [<color:#176CA4><b>PK</b></color>] change_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] original_id\n  <color:#218653>→ appointment.appointment_id</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] proposed_id\n  <color:#218653>→ appointment.appointment_id</color>
+{field} [<color:#218653><b>FK</b></color>] absence_id\n  <color:#218653>→ dentist_unavailable.absence_id ?</color>
+{field} [<color:#218653><b>FK</b></color>] unavailable_id\n  <color:#218653>→ resource_unavailable.unavailable_id ?</color>
+{field} [<color:#218653><b>FK</b></color>] proposed_by\n  <color:#218653>→ staff.staff_id</color>
+{field} proposed_at\n  <color:#777777>timestamp</color>
+{field} reason\n  <color:#777777>varchar(300)</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} responded_at\n  <color:#777777>timestamp ?</color>
+{field} response_basis\n  <color:#777777>varchar(300) ?</color>
+{field} applied_at\n  <color:#777777>timestamp ?</color>
+}
+entity "资源类别\nresource_category" as resource_category {
+{field} [<color:#176CA4><b>PK</b></color>] category_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>] category_code\n  <color:#777777>varchar(30)</color>
+{field} [<color:#467DA6><b>UQ</b></color>] name\n  <color:#777777>varchar(80)</color>
+{field} description\n  <color:#777777>varchar(300) ?</color>
+{field} enabled\n  <color:#777777>boolean</color>
+}
+entity "服务资源需求\nservice_resource_requirement" as service_resource_requirement {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] item_id\n  <color:#218653>→ service_item.item_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] category_id\n  <color:#218653>→ resource_category.category_id</color>
+{field} quantity\n  <color:#777777>integer</color>
+{field} turnover_minutes\n  <color:#777777>integer</color>
+}
+entity "牙医可提供服务\ndentist_service" as dentist_service {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] dentist_id\n  <color:#218653>→ staff.staff_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] item_id\n  <color:#218653>→ service_item.item_id</color>
+{field} enabled\n  <color:#777777>boolean</color>
+{field} verified_at\n  <color:#777777>timestamp</color>
+}
+entity "预约拟做项目\nappointment_item" as appointment_item {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] appointment_id\n  <color:#218653>→ appointment.appointment_id</color>
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] item_id\n  <color:#218653>→ service_item.item_id</color>
+{field} estimated_quantity\n  <color:#777777>decimal(10,2)</color>
+{field} remark\n  <color:#777777>varchar(300) ?</color>
+}
+}
+package "接诊与费用" as G2 #EEF3FA {
+entity "接诊记录\nvisit_record" as visit_record {
+{field} [<color:#176CA4><b>PK</b></color>] visit_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] appointment_id\n  <color:#218653>→ appointment.appointment_id</color>
+{field} [<color:#218653><b>FK</b></color>] dentist_id\n  <color:#218653>→ staff.staff_id</color>
+{field} allergy_result\n  <color:#777777>varchar(20)</color>
+{field} allergy_snapshot\n  <color:#777777>text ?</color>
+{field} clinical_notes\n  <color:#777777>text ?</color>
+{field} started_at\n  <color:#777777>timestamp</color>
+{field} completed_at\n  <color:#777777>timestamp ?</color>
+}
+entity "治疗项目\nservice_item" as service_item {
+{field} [<color:#176CA4><b>PK</b></color>] item_id\n  <color:#777777>bigint</color>
+{field} name\n  <color:#777777>varchar(100)</color>
+{field} unit\n  <color:#777777>varchar(30)</color>
+{field} current_price\n  <color:#777777>decimal(12,2)</color>
+{field} enabled\n  <color:#777777>boolean</color>
+{field} appointment_enabled\n  <color:#777777>boolean</color>
+{field} suggested_minutes\n  <color:#777777>integer</color>
+{field} [<color:#218653><b>FK</b></color>] category_id\n  <color:#218653>→ service_category.category_id</color>
+}
+entity "诊疗服务分类\nservice_category" as service_category {
+{field} [<color:#176CA4><b>PK</b></color>] category_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>] code\n  <color:#777777>varchar(30)</color>
+{field} [<color:#467DA6><b>UQ</b></color>] name\n  <color:#777777>varchar(80)</color>
+{field} display_order\n  <color:#777777>integer</color>
+{field} enabled\n  <color:#777777>boolean</color>
+}
+entity "诊疗项目记录\ncare_item" as care_item {
+{field} [<color:#176CA4><b>PK</b></color>] care_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] visit_id\n  <color:#218653>→ visit_record.visit_id</color>
+{field} [<color:#218653><b>FK</b></color>] item_id\n  <color:#218653>→ service_item.item_id</color>
+{field} name_snapshot\n  <color:#777777>varchar(100)</color>
+{field} unit_snapshot\n  <color:#777777>varchar(30)</color>
+{field} brand_spec\n  <color:#777777>varchar(100) ?</color>
+{field} quoted_quantity\n  <color:#777777>decimal(10,2)</color>
+{field} quoted_price\n  <color:#777777>decimal(12,2)</color>
+{field} [<color:#218653><b>FK</b></color>] informed_by\n  <color:#218653>→ staff.staff_id</color>
+{field} informed_at\n  <color:#777777>timestamp</color>
+{field} consented_at\n  <color:#777777>timestamp ?</color>
+{field} consent_basis\n  <color:#777777>varchar(300) ?</color>
+{field} actual_quantity\n  <color:#777777>decimal(10,2) ?</color>
+{field} actual_price\n  <color:#777777>decimal(12,2) ?</color>
+{field} [<color:#218653><b>FK</b></color>] performed_by\n  <color:#218653>→ staff.staff_id ?</color>
+{field} performed_at\n  <color:#777777>timestamp ?</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] supersedes_id\n  <color:#218653>→ care_item.care_id ?</color>
+{field} change_reason\n  <color:#777777>varchar(300) ?</color>
+{field} site_description\n  <color:#777777>varchar(100) ?</color>
+}
+entity "结算单\nbill" as bill {
+{field} [<color:#176CA4><b>PK</b></color>] bill_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] visit_id\n  <color:#218653>→ visit_record.visit_id</color>
+{field} [<color:#467DA6><b>UQ</b></color>] bill_no\n  <color:#777777>varchar(40)</color>
+{field} revision_no\n  <color:#777777>integer</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} [<color:#218653><b>FK</b></color>] supersedes_id\n  <color:#218653>→ bill.bill_id ?</color>
+{field} issued_at\n  <color:#777777>timestamp ?</color>
+{field} [<color:#218653><b>FK</b></color>] created_by\n  <color:#218653>→ staff.staff_id</color>
+{field} reason\n  <color:#777777>varchar(300) ?</color>
+{field} version\n  <color:#777777>integer</color>
+}
+entity "结算明细\nbill_line" as bill_line {
+{field} [<color:#176CA4><b>PK</b></color>/<color:#218653><b>FK</b></color>] bill_id\n  <color:#218653>→ bill.bill_id</color>
+{field} [<color:#176CA4><b>PK</b></color>] line_no\n  <color:#777777>integer</color>
+{field} [<color:#218653><b>FK</b></color>] care_id\n  <color:#218653>→ care_item.care_id</color>
+{field} name_snapshot\n  <color:#777777>varchar(100)</color>
+{field} unit_snapshot\n  <color:#777777>varchar(30)</color>
+{field} brand_snapshot\n  <color:#777777>varchar(100) ?</color>
+{field} quantity\n  <color:#777777>decimal(10,2)</color>
+{field} unit_price\n  <color:#777777>decimal(12,2)</color>
+}
+entity "项目调价记录\nservice_price_history" as service_price_history {
+{field} [<color:#176CA4><b>PK</b></color>] price_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] item_id\n  <color:#218653>→ service_item.item_id</color>
+{field} price\n  <color:#777777>decimal(12,2)</color>
+{field} effective_at\n  <color:#777777>timestamp</color>
+{field} [<color:#218653><b>FK</b></color>] changed_by\n  <color:#218653>→ staff.staff_id</color>
+{field} reason\n  <color:#777777>varchar(300)</color>
+}
+entity "接诊补记\nvisit_addendum" as visit_addendum {
+{field} [<color:#176CA4><b>PK</b></color>] addendum_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] visit_id\n  <color:#218653>→ visit_record.visit_id</color>
+{field} [<color:#218653><b>FK</b></color>] author_id\n  <color:#218653>→ staff.staff_id</color>
+{field} recorded_at\n  <color:#777777>timestamp</color>
+{field} content\n  <color:#777777>text</color>
+{field} reason\n  <color:#777777>varchar(300)</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] corrects_id\n  <color:#218653>→ visit_addendum.addendum_id ?</color>
+}
+}
+package "复诊与联系" as G3 #F2F6EB {
+entity "复诊计划\nfollowup_plan" as followup_plan {
+{field} [<color:#176CA4><b>PK</b></color>] plan_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] source_visit_id\n  <color:#218653>→ visit_record.visit_id</color>
+{field} [<color:#218653><b>FK</b></color>] dentist_id\n  <color:#218653>→ staff.staff_id</color>
+{field} suggested_from\n  <color:#777777>date</color>
+{field} suggested_to\n  <color:#777777>date</color>
+{field} duration_minutes\n  <color:#777777>integer</color>
+{field} purpose\n  <color:#777777>varchar(200)</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] supersedes_id\n  <color:#218653>→ followup_plan.plan_id ?</color>
+{field} termination_reason\n  <color:#777777>varchar(300) ?</color>
+}
+entity "联系与提醒记录\ncontact_record" as contact_record {
+{field} [<color:#176CA4><b>PK</b></color>] contact_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] plan_id\n  <color:#218653>→ followup_plan.plan_id ?</color>
+{field} [<color:#218653><b>FK</b></color>] appointment_id\n  <color:#218653>→ appointment.appointment_id ?</color>
+{field} kind\n  <color:#777777>varchar(20)</color>
+{field} channel\n  <color:#777777>varchar(20)</color>
+{field} planned_at\n  <color:#777777>timestamp ?</color>
+{field} contacted_at\n  <color:#777777>timestamp ?</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} result\n  <color:#777777>varchar(300) ?</color>
+{field} acknowledged_at\n  <color:#777777>timestamp ?</color>
+{field} acknowledgment_basis\n  <color:#777777>varchar(300) ?</color>
+{field} next_contact_at\n  <color:#777777>timestamp ?</color>
+{field} [<color:#218653><b>FK</b></color>] staff_id\n  <color:#218653>→ staff.staff_id ?</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] retry_of_id\n  <color:#218653>→ contact_record.contact_id ?</color>
+}
+}
+package "到店候诊" as G4 #F0EDF7 {
+entity "候诊登记\nqueue_ticket" as queue_ticket {
+{field} [<color:#176CA4><b>PK</b></color>] ticket_id\n  <color:#777777>bigint</color>
+{field} [<color:#467DA6><b>UQ</b></color>/<color:#218653><b>FK</b></color>] appointment_id\n  <color:#218653>→ appointment.appointment_id</color>
+{field} queue_date\n  <color:#777777>date</color>
+{field} queue_no\n  <color:#777777>integer</color>
+{field} [<color:#218653><b>FK</b></color>] registered_by\n  <color:#218653>→ staff.staff_id</color>
+{field} registered_at\n  <color:#777777>timestamp</color>
+{field} state\n  <color:#777777>varchar(20)</color>
+{field} priority\n  <color:#777777>integer</color>
+{field} priority_reason\n  <color:#777777>varchar(300) ?</color>
+{field} closed_at\n  <color:#777777>timestamp ?</color>
+}
+entity "叫号记录\nqueue_call" as queue_call {
+{field} [<color:#176CA4><b>PK</b></color>] call_id\n  <color:#777777>bigint</color>
+{field} [<color:#218653><b>FK</b></color>] ticket_id\n  <color:#218653>→ queue_ticket.ticket_id</color>
+{field} attempt_no\n  <color:#777777>integer</color>
+{field} [<color:#218653><b>FK</b></color>] called_by\n  <color:#218653>→ staff.staff_id</color>
+{field} called_at\n  <color:#777777>timestamp</color>
+{field} answered_at\n  <color:#777777>timestamp ?</color>
+{field} result\n  <color:#777777>varchar(20)</color>
+}
+}
+' FK credential.staff_id > staff.staff_id
+staff ||--o{ credential
+' FK credential.verified_by > staff.staff_id
+staff ||--o{ credential
+' FK patient.primary_dentist_id > staff.staff_id
+staff |o--o{ patient
+' FK account.patient_id > patient.patient_id
+patient |o--o| account
+' FK account.staff_id > staff.staff_id
+staff |o--o| account
+' FK schedule.dentist_id > staff.staff_id
+staff ||--o{ schedule
+' FK appointment.patient_id > patient.patient_id
+patient ||--o{ appointment
+' FK appointment.schedule_id > schedule.schedule_id
+schedule |o--o{ appointment
+' FK appointment.intended_dentist_id > staff.staff_id
+staff |o--o{ appointment
+' FK appointment.previous_id > appointment.appointment_id
+appointment |o--o{ appointment
+' FK appointment.followup_plan_id > followup_plan.plan_id
+followup_plan |o--o{ appointment
+' FK appointment.requested_by > account.account_id
+account ||--o{ appointment
+' FK resource.category_id > resource_category.category_id
+resource_category ||--o{ resource
+' FK resource_unavailable.resource_id > resource.resource_id
+resource ||--o{ resource_unavailable
+' FK resource_booking.appointment_id > appointment.appointment_id
+appointment ||--o{ resource_booking
+' FK resource_booking.resource_id > resource.resource_id
+resource ||--o{ resource_booking
+' FK visit_record.appointment_id > appointment.appointment_id
+appointment ||--o| visit_record
+' FK visit_record.dentist_id > staff.staff_id
+staff ||--o{ visit_record
+' FK service_item.category_id > service_category.category_id
+service_category ||--o{ service_item
+' FK care_item.visit_id > visit_record.visit_id
+visit_record ||--o{ care_item
+' FK care_item.item_id > service_item.item_id
+service_item ||--o{ care_item
+' FK care_item.informed_by > staff.staff_id
+staff ||--o{ care_item
+' FK care_item.performed_by > staff.staff_id
+staff |o--o{ care_item
+' FK care_item.supersedes_id > care_item.care_id
+care_item |o--o| care_item
+' FK bill.visit_id > visit_record.visit_id
+visit_record ||--o{ bill
+' FK bill.supersedes_id > bill.bill_id
+bill |o--o{ bill
+' FK bill.created_by > staff.staff_id
+staff ||--o{ bill
+' FK bill_line.bill_id > bill.bill_id
+bill ||--o{ bill_line
+' FK bill_line.care_id > care_item.care_id
+care_item ||--o{ bill_line
+' FK followup_plan.source_visit_id > visit_record.visit_id
+visit_record ||--o{ followup_plan
+' FK followup_plan.dentist_id > staff.staff_id
+staff ||--o{ followup_plan
+' FK followup_plan.supersedes_id > followup_plan.plan_id
+followup_plan |o--o| followup_plan
+' FK contact_record.plan_id > followup_plan.plan_id
+followup_plan |o--o{ contact_record
+' FK contact_record.appointment_id > appointment.appointment_id
+appointment |o--o{ contact_record
+' FK contact_record.staff_id > staff.staff_id
+staff |o--o{ contact_record
+' FK contact_record.retry_of_id > contact_record.contact_id
+contact_record |o--o| contact_record
+' FK audit_log.actor_account_id > account.account_id
+account |o--o{ audit_log
+' FK dentist_assignment.patient_id > patient.patient_id
+patient ||--o{ dentist_assignment
+' FK dentist_assignment.dentist_id > staff.staff_id
+staff ||--o{ dentist_assignment
+' FK dentist_assignment.previous_id > dentist_assignment.assignment_id
+dentist_assignment |o--o| dentist_assignment
+' FK dentist_assignment.recorded_by > staff.staff_id
+staff ||--o{ dentist_assignment
+' FK dentist_unavailable.dentist_id > staff.staff_id
+staff ||--o{ dentist_unavailable
+' FK dentist_unavailable.recorded_by > staff.staff_id
+staff ||--o{ dentist_unavailable
+' FK appointment_change.original_id > appointment.appointment_id
+appointment ||--o{ appointment_change
+' FK appointment_change.proposed_id > appointment.appointment_id
+appointment ||--o| appointment_change
+' FK appointment_change.absence_id > dentist_unavailable.absence_id
+dentist_unavailable |o--o{ appointment_change
+' FK appointment_change.unavailable_id > resource_unavailable.unavailable_id
+resource_unavailable |o--o{ appointment_change
+' FK appointment_change.proposed_by > staff.staff_id
+staff ||--o{ appointment_change
+' FK service_price_history.item_id > service_item.item_id
+service_item ||--|{ service_price_history
+' FK service_price_history.changed_by > staff.staff_id
+staff ||--o{ service_price_history
+' FK visit_addendum.visit_id > visit_record.visit_id
+visit_record ||--o{ visit_addendum
+' FK visit_addendum.author_id > staff.staff_id
+staff ||--o{ visit_addendum
+' FK visit_addendum.corrects_id > visit_addendum.addendum_id
+visit_addendum |o--o| visit_addendum
+' FK service_resource_requirement.item_id > service_item.item_id
+service_item ||--o{ service_resource_requirement
+' FK service_resource_requirement.category_id > resource_category.category_id
+resource_category ||--o{ service_resource_requirement
+' FK dentist_service.dentist_id > staff.staff_id
+staff ||--o{ dentist_service
+' FK dentist_service.item_id > service_item.item_id
+service_item ||--o{ dentist_service
+' FK appointment_item.appointment_id > appointment.appointment_id
+appointment ||--o{ appointment_item
+' FK appointment_item.item_id > service_item.item_id
+service_item ||--o{ appointment_item
+' FK queue_ticket.appointment_id > appointment.appointment_id
+appointment ||--o| queue_ticket
+' FK queue_ticket.registered_by > staff.staff_id
+staff ||--o{ queue_ticket
+' FK queue_call.ticket_id > queue_ticket.ticket_id
+queue_ticket ||--o{ queue_call
+' FK queue_call.called_by > staff.staff_id
+staff ||--o{ queue_call
+' FK account_role.account_id > account.account_id
+account ||--o{ account_role
+' FK account_role.role_id > role.role_id
+role ||--o{ account_role
+' FK account_role.granted_by > account.account_id
+account |o--o{ account_role
+' FK role_permission.role_id > role.role_id
+role ||--o{ role_permission
+' FK role_permission.permission_id > permission.permission_id
+permission ||--o{ role_permission
+' FK auth_session.account_id > account.account_id
+account ||--o{ auth_session
+legend bottom
+蓝色 PK：主键；绿色 FK：外键；蓝灰色 UQ：单列唯一。多个 PK 字段共同组成联合主键。
+34张表  69条外键  同一数据库供患者端与管理端分别授权访问
+PK 主键；FK 外键；UQ 单列唯一；? 可空；多个PK为联合主键。
+字段下方的 → 表名.列名明确外键目标；连线端点表示全生命周期的数量。
+账号的患者与员工身份二选一；联系记录的计划与预约归属二选一。
+当前有效预约和有效结算的数量、时段冲突由业务约束另行控制。
+endlegend
+@enduml

@@ -1,0 +1,39 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor #A0A0A0
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+title 主治任期关系类图
+class "患者" as P {
+编号、姓名、联系方式
+当前过敏申报
+}
+class "牙医" as D {
+执业标识
++确认诊疗事实()
++制定复诊建议()
+}
+class "主治交接记录" as XA {
+生效及终止时间、确认依据
+交接原因
+}
+P "1" *-down- "0..*" XA : 主治任期
+D "1" -down- "0..*" XA : 承担主治
+legend bottom
+临时替诊不改变主治任期；长期交接结束旧任期并新建记录。
+endlegend
+@enduml

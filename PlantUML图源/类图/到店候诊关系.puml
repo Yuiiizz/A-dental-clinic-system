@@ -1,0 +1,46 @@
+@startuml
+hide circle
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 16
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+skinparam classBorderColor black
+skinparam classBackgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageBorderColor #A0A0A0
+skinparam packageStyle rectangle
+skinparam noteBackgroundColor white
+skinparam noteBorderColor black
+skinparam nodesep 105
+skinparam ranksep 75
+skinparam dpi 150
+title 到店候诊关系类图
+class "预约就诊" as A {
+时间、状态、事项
++确认预约()
++登记到诊()
+}
+class "候诊登记" as QT {
+当日号码、排序等级、状态
++登记过号()
++登记回队()
+}
+class "叫号记录" as QC {
+呼叫序号、时间、结果
++登记回应()
+}
+class "工作人员" as W {
+编号、姓名、在岗状态
+}
+A "1" -down- "0..1" QT : 签到候诊
+QT "1" *-down- "0..*" QC : 历次叫号
+W "1" -down- "0..*" QT : 登记人
+W "1" -down- "0..*" QC : 呼叫人
+legend bottom
+一次预约至多一张候诊票，一张票可多次叫号。
+过号不等于未到，回队复用原票；接诊或退出后不能继续叫号。
+endlegend
+@enduml
