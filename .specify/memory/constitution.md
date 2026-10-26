@@ -1,50 +1,70 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!-- Sync Impact Report
+Version: 未填写模板 → 1.0.0（首次建立）
+Principles: 事实与规格、双端权限、业务连续性、数据一致性、验证交付。
+Added: 业务边界、开发流程、治理规则。Removed: 模板占位符。
+Deferred placeholders: 无。独立后续工作：speckit-specify 编写首个功能规格。
+此同步说明供本地审阅，首次提交前移除。
+-->
+# A口腔诊所系统 Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. 以事实和可验收规格为依据
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+必须以根目录《1602240113徐乐怡牙科系统分析与设计.docx》和用户明确修订为依据。
+区分用户亲历、了解的信息、拟建方案及开发假设，不编造访谈人数或收益数据。
+每项功能必须先有规格和验收场景；报告矛盾要记录处理依据，不静默改写。
+用户已删除旧图片，未经后续要求不恢复；缺图不代表允许猜测关系。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. 双端与角色权限分别校验
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+患者小程序与员工管理网页分别提供入口，共用受控业务服务。
+服务端按身份、操作、记录归属和该角色的门店范围授权，不以隐藏按钮替代权限校验。
+多角色的功能与门店范围不得交叉拼接。系统管理员不默认获得病历和财务全文。
+患者只办理本人业务，共享手机号不是档案认领凭据，员工与患者账号身份不混绑。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. 保留前台和临床责任
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+正常自助预约直接确认，不逐笔交前台审批；前台保留电话、现场核验与异常协调职责。
+人工与自助使用相同号源及资源约束。意向医生、长期主治和实际接诊医生分别表达。
+停诊先关闭新增，再协调既有患者；通知送达不等于患者接受替诊。
+预约限制不代替医疗判断，保留人工就医和申诉渠道。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. 维护数据一致性和历史
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+预约、占用、候诊和复诊计划联动必须整体成功或失败；重复请求不得重复占号。
+类与表按业务关系映射，不机械一类一表。冗余必须说明来源和维护约束。
+重要历史采用留痕、撤销或冲正，不以级联删除掩盖事实。
+账单、收款、退款、发票分别记录；采购、耗用、折旧分别核算，禁止重复计成本。
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. 以验证结果判定完成
+
+必须验证正常流程、越权、并发、重复操作、边界和失败恢复。
+建表成功、规格审阅通过均不等于系统业务测试通过。
+云部署前验证迁移、备份恢复、密钥及访问配置；记录实际检查结果和限制。
+演示使用合成数据；模拟支付、通知和票据必须标识，不冒充真实业务结果。
+
+## 业务与数据边界
+
+首个功能围绕多门店排班、本人预约、前台协助、取消改约与签到。
+诊疗复诊、收费票据、库存资产和成本属于整体范围，分阶段制定规格。
+首期不做预约收费、自动罚款、线上家庭代办、自动诊断、医保和完整法定财务总账。
+取消限制是待批准的设计方案，未批准不启用自动限制，不追溯加重既有预约规则。
+患者敏感资料不进入公开日志、仓库及演示截图，密钥不写入版本文件。
+技术栈由实施计划比较决定，不为凑组件引入复杂架构。
+
+## 开发流程
+
+按项目规则、功能规格、澄清、技术方案、任务拆分、一致性检查、实现和验收推进。
+先打通一条完整业务流程，再扩展模块；行为或数据变化须同步相关规格和验证条件。
+当前仅本地保存，未经用户后续明确授权，不推送 GitHub，不发布系统。
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+本规则首次建立为 1.0.0，采用用户所在时区日期。
+用户新要求优先；与报告冲突时记录差异，按影响调整规格和验证条件。
+不兼容原则变更升主版本，新增原则升次版本，纯文字澄清升修订版本。
+每份实施计划须检查本规则并说明例外理由；不得声称未执行的测试已通过。
+修改规则须记录原因及影响，不自动修改原 Word。
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-10-21 | **Last Amended**: 2026-10-21
