@@ -54,3 +54,7 @@ deploy/operations/*.tar.gz
 deploy/operations/*-deployment.md
 docs/screenshots/
 docs/references/
+
+# 过时的阶段说明仅保留在本地
+开发文档说明.md
+docs/verification/nondeployment-status.md
