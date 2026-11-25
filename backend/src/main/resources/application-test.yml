@@ -1,0 +1,15 @@
+# test（集成测试）profile —— 与 local 使用不同数据库（隔离，防止测试污染开发库）。
+# 集成测试可用本地模拟身份与 fixture；不指向任何其他项目的数据库。
+
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/a_dental_test}
+    username: ${TEST_DB_USERNAME:a_dental_test}
+    password: ${TEST_DB_PASSWORD:}
+
+app:
+  mock:
+    # 测试替身须显式开启（集成测试用 local + --app.mock.wechat-enabled=true）；默认关闭，避免 staging/test/default 误用固定身份。
+    wechat-enabled: ${MOCK_WECHAT_ENABLED:false}
+  seed:
+    enabled: ${APP_SEED_ENABLED:true}

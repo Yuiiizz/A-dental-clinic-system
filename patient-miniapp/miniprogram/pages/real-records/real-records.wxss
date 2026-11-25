@@ -1,0 +1,5 @@
+.real-badge { display: inline-block; padding: 5rpx 12rpx; border-radius: 999rpx; background: #dff4e9; color: #1c6c52; font-size: 21rpx; }
+.record-card { margin-top: 14rpx; padding: 20rpx; border-radius: 14rpx; background: #fff; border: 1rpx solid #dcebe7; }
+.record-title { font-size: 25rpx; font-weight: 650; color: #1c443e; }
+.record-meta { margin-top: 5rpx; color: #728c86; font-size: 21rpx; line-height: 1.5; }
+.record-body { margin-top: 8rpx; color: #496862; font-size: 22rpx; line-height: 1.55; }

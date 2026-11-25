@@ -1,0 +1,45 @@
+<view class="mini-page">
+  <view class="mini-hero">
+    <view class="eyebrow">{{hasSession ? '已登录用户 · 真实接口' : '未登录 · 真实接口'}}</view>
+    <view class="title">就诊与复诊</view>
+    <view class="sub">读取真实 visit_record 和 followup_plan，与院内记录使用同一数据。</view>
+    <text class="real-badge">真实数据</text>
+  </view>
+  <p wx:if="{{error && hasSession}}" class="error">{{error}}</p>
+  <p wx:if="{{loading}}" class="mini-muted">正在读取真实记录…</p>
+  <view wx:if="{{!hasSession}}" class="mini-card"><view class="mini-muted">请先完成微信登录或本人建档，才能读取真实就诊记录。</view><button class="mini-btn" bindtap="goLogin">微信登录 / 本人建档</button></view>
+  <view class="mini-tabs">
+    <view class="tab {{tab === 'visits' ? 'active' : ''}}" data-tab="visits" bindtap="switchTab">就诊记录</view>
+    <view class="tab {{tab === 'plans' ? 'active' : ''}}" data-tab="plans" bindtap="switchTab">复诊计划</view>
+    <view class="tab {{tab === 'treatment' ? 'active' : ''}}" data-tab="treatment" bindtap="switchTab">治疗计划</view>
+  </view>
+
+  <block wx:if="{{tab === 'visits'}}">
+    <view wx:if="{{visits.length === 0}}" class="mini-card"><view class="mini-muted">暂无真实就诊记录。</view></view>
+    <view wx:for="{{visits}}" wx:key="visit_id" class="record-card">
+      <view class="record-title">{{item.display}} · {{item.dentist_name}}</view>
+      <view class="record-meta">过敏核对：{{item.allergy_result}}<text wx:if="{{item.allergy_snapshot}}"> · {{item.allergy_snapshot}}</text></view>
+      <view class="record-body">{{item.clinical_notes || '暂无临床记录摘要'}}</view>
+    </view>
+  </block>
+  <block wx:elif="{{tab === 'plans'}}">
+    <view wx:if="{{plans.length === 0}}" class="mini-card"><view class="mini-muted">暂无真实复诊计划。</view></view>
+    <view wx:for="{{plans}}" wx:key="plan_id" class="record-card">
+      <view class="record-title">{{item.suggested_from}} – {{item.suggested_to}} · {{item.dentist_name}}</view>
+      <view class="record-meta">{{item.purpose}} · {{item.duration_minutes}} 分钟 · {{item.state}}<text wx:if="{{item.service_item_name}}"> · 项目：{{item.service_item_name}}</text></view>
+      <button wx:if="{{item.state === '待协调'}}" class="mini-btn secondary" data-id="{{item.plan_id}}" bindtap="bookFollowup">预约此复诊</button>
+    </view>
+  </block>
+  <block wx:else>
+    <view wx:if="{{treatmentError}}" class="error">{{treatmentError}}<button class="mini-btn secondary" bindtap="load">重试</button></view>
+    <view wx:if="{{!treatmentError && treatmentPlans.length === 0}}" class="mini-card"><view class="mini-muted">暂无真实治疗计划。</view></view>
+    <view wx:for="{{treatmentPlans}}" wx:key="plan_id" class="record-card">
+      <view class="record-title">{{item.title}} · {{item.state}}</view>
+      <view class="record-meta">{{item.dentist_name}} · 预估 ¥{{item.displayTotal}}<text wx:if="{{item.diagnosis}}"> · {{item.diagnosis}}</text></view>
+      <view wx:for="{{item.items}}" wx:for-item="line" wx:key="item_id" class="record-meta">· {{line.phase}} {{line.name}} {{line.tooth_position}} ×{{line.quantity}} · {{line.status}}</view>
+      <view wx:if="{{item.state === '待患者确认'}}" class="mini-actions" style="margin-top:8rpx;"><button class="mini-btn ghost" data-id="{{item.plan_id}}" bindtap="rejectPlan" disabled="{{submitting}}">暂不接受</button><button class="mini-btn" data-id="{{item.plan_id}}" bindtap="acceptPlan" disabled="{{submitting}}">确认接受</button></view>
+    </view>
+  </block>
+  <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+  <view class="mini-foot">真实记录来自后台；演示记录页仍保留并明确标识。</view>
+</view>

@@ -1,0 +1,109 @@
+<view class="mini-page">
+  <view class="mini-hero">
+    <view class="eyebrow">{{hasSession ? '我的预约' : '预约服务'}}</view>
+    <view class="title">我的预约</view>
+    <view class="sub">查看排班与可约时段，也可以管理已有预约。</view>
+    <text class="real-badge">真实数据</text>
+  </view>
+
+  <p wx:if="{{error && hasSession}}" class="error">{{error}}</p>
+  <p wx:if="{{message}}" class="notice">{{message}}</p>
+  <p wx:if="{{loading}}" class="mini-muted">正在更新预约信息…</p>
+  <view wx:if="{{followupPlan}}" class="real-card">
+    <view class="card-title">预约复诊计划 {{followupPlan.plan_id}}</view>
+    <view class="appt-meta">{{followupPlan.purpose}} · 建议 {{followupPlan.suggested_from}} 至 {{followupPlan.suggested_to}}</view>
+    <view class="mini-muted">优先原主治 {{followupPlan.dentist_name}}，预计 {{followupPlan.duration_minutes}} 分钟。这里仅列该医生排班；如需临时替诊，请联系门店并确认替诊安排。</view>
+  </view>
+  <view wx:if="{{!hasSession}}" class="real-card"><view class="mini-muted">请先完成微信登录或本人建档，才能读取真实排班和预约。</view><button class="mini-btn" bindtap="goLogin">微信登录 / 本人建档</button></view>
+
+  <block wx:if="{{overview}}">
+    <view class="real-card appointments-card">
+      <view class="section-heading"><text class="card-title">我的预约</text><text class="section-count">共 {{appointments.length}} 条</text></view>
+      <view wx:if="{{appointments.length === 0}}" class="mini-muted">暂无预约。需要就诊时可从首页“预约挂号”开始。</view>
+      <view wx:if="{{featuredAppointment}}" class="featured-appt">
+        <view class="appt-topline"><text class="featured-label">{{featuredAppointment.state === '候诊中' ? '正在候诊' : '最近预约'}}</text><text class="status-pill status-{{featuredAppointment.statusTone}}">{{featuredAppointment.state}}</text></view>
+        <view class="featured-time">{{featuredAppointment.display}}</view>
+        <view class="featured-service">{{featuredAppointment.item_name}}</view>
+        <view class="appt-meta">{{featuredAppointment.branch_name}} · {{featuredAppointment.dentist_name}}</view>
+        <view wx:if="{{featuredAppointment.queue_no}}" class="queue-highlight">候诊号 {{featuredAppointment.queue_no}} · 请留意前台叫号</view>
+        <view wx:if="{{featuredAppointment.canCancel}}" class="appt-actions">
+          <button class="mini-btn" data-id="{{featuredAppointment.appointment_id}}" bindtap="scanCheckin" disabled="{{submitting}}">扫码签到</button>
+          <view class="appt-secondary-actions"><button class="mini-btn secondary" data-id="{{featuredAppointment.appointment_id}}" bindtap="startReschedule" disabled="{{submitting}}">改约</button><button class="mini-btn ghost" data-id="{{featuredAppointment.appointment_id}}" bindtap="cancel" disabled="{{submitting}}">取消预约</button></view>
+        </view>
+      </view>
+      <view wx:if="{{otherActiveAppointments.length > 0}}" class="group-label">其他待就诊 · {{otherActiveAppointments.length}}</view>
+      <view wx:for="{{otherActiveAppointments}}" wx:key="appointment_id" class="appt-row active-row">
+        <view class="appt-topline"><text class="appt-title">{{item.display}} · {{item.item_name}}</text><text class="status-pill status-{{item.statusTone}}">{{item.state}}</text></view>
+        <view class="appt-meta">{{item.branch_name}} · {{item.dentist_name}}</view>
+        <view wx:if="{{item.queue_no}}" class="queue-highlight">候诊号 {{item.queue_no}} · 请留意前台叫号</view>
+        <view wx:if="{{item.canCancel}}" class="appt-secondary-actions"><button class="mini-btn" data-id="{{item.appointment_id}}" bindtap="scanCheckin" disabled="{{submitting}}">扫码签到</button><button class="mini-btn secondary" data-id="{{item.appointment_id}}" bindtap="startReschedule" disabled="{{submitting}}">改约</button><button class="mini-btn ghost" data-id="{{item.appointment_id}}" bindtap="cancel" disabled="{{submitting}}">取消</button></view>
+      </view>
+      <view wx:if="{{!featuredAppointment && appointments.length > 0}}" class="mini-muted">目前没有待就诊预约。</view>
+      <button wx:if="{{historyAppointments.length > 0}}" class="history-toggle" bindtap="toggleHistory">{{historyExpanded ? '收起' : '查看'}}已结束／已取消记录（{{historyAppointments.length}}）</button>
+      <block wx:if="{{historyExpanded}}"><view wx:for="{{historyAppointments}}" wx:key="appointment_id" class="appt-row history-row">
+        <view class="appt-topline"><text class="appt-title">{{item.display}} · {{item.item_name}}</text><text class="status-pill status-muted">{{item.state}}</text></view>
+        <view class="appt-meta">{{item.branch_name}} · {{item.dentist_name}}</view>
+        <view wx:if="{{item.queue_no}}" class="mini-muted">候诊号 {{item.queue_no}}</view>
+      </view></block>
+    </view>
+
+    <view class="real-card">
+      <view class="section-heading"><text class="card-title">另约就诊时间</text></view>
+      <button wx:if="{{!followupPlan}}" class="history-toggle" bindtap="toggleBookingForm">{{showBookingForm ? '收起预约表单' : '展开预约表单'}}</button>
+      <block wx:if="{{showBookingForm || followupPlan}}">
+      <view class="real-label">排班</view>
+      <picker mode="selector" range="{{schedules}}" range-key="label" value="{{scheduleIndex}}" bindchange="pickSchedule">
+        <view class="picker-box">{{schedules[scheduleIndex].label || '暂无排班'}}</view>
+      </picker>
+      <view class="real-label" style="margin-top:14rpx;">项目</view>
+      <picker mode="selector" range="{{services}}" range-key="label" value="{{serviceIndex}}" bindchange="pickService">
+        <view class="picker-box">{{services[serviceIndex].label || '暂无项目'}}</view>
+      </picker>
+      <view class="real-label" style="margin-top:14rpx;">时段</view>
+      <picker mode="selector" range="{{slots}}" range-key="label" value="{{slotIndex}}" bindchange="pickSlot">
+        <view class="picker-box">{{slots[slotIndex].label || '该排班暂无可约时段'}}</view>
+      </picker>
+      <button class="mini-btn" bindtap="submit" disabled="{{submitting || loading || slots.length === 0}}">{{submitting ? '提交中…' : followupPlan ? '确认复诊预约' : '确认预约'}}</button>
+      <view class="mini-muted">可约时段来自后台营业区间和排班；展示不代表预占，提交冲突后页面会重新读取权威数据。</view>
+      </block>
+    </view>
+
+    <view wx:if="{{reschedulingId}}" class="real-card">
+      <view class="card-title">真实改约</view>
+      <view class="real-label">改约原因（必填）</view>
+      <input class="picker-box" placeholder="例如：时间冲突" value="{{rescheduleReason}}" bindinput="setRescheduleReason" maxlength="300" disabled="{{submitting}}" />
+      <view class="real-label">新排班</view>
+      <picker mode="selector" range="{{schedules}}" range-key="label" value="{{rescheduleScheduleIndex}}" disabled="{{submitting}}" bindchange="pickRescheduleSchedule"><view class="picker-box">{{schedules[rescheduleScheduleIndex].label}}</view></picker>
+      <view class="real-label" style="margin-top:12rpx;">项目</view>
+      <picker mode="selector" range="{{services}}" range-key="label" value="{{rescheduleServiceIndex}}" disabled="{{submitting}}" bindchange="pickRescheduleService"><view class="picker-box">{{services[rescheduleServiceIndex].label}}</view></picker>
+      <view class="real-label" style="margin-top:12rpx;">新时段</view>
+      <picker mode="selector" range="{{rescheduleSlots}}" range-key="label" value="{{rescheduleSlotIndex}}" disabled="{{submitting}}" bindchange="pickRescheduleSlot"><view class="picker-box">{{rescheduleSlots[rescheduleSlotIndex].label || '暂无时段'}}</view></picker>
+      <view wx:if="{{rescheduleSlots.length === 0}}" class="mini-muted">当前选择的排班与项目没有可改约时段，请换排班或项目；若都没有，请稍后再试。</view>
+      <view wx:if="{{error}}" class="error">{{error}}</view>
+      <view class="mini-actions" style="margin-top:12rpx;"><button class="mini-btn ghost" bindtap="closeReschedule">取消改约</button><button class="mini-btn secondary" bindtap="confirmReschedule" disabled="{{submitting || rescheduleSlots.length === 0}}">{{submitting ? '改约提交中…' : '确认改约'}}</button></view>
+      <view class="mini-muted">保留原预约历史，成功后生成关联的新预约；失败时保留原号源。</view>
+    </view>
+
+    <view class="real-card">
+      <view class="card-title">我的协调方案</view>
+      <view class="mini-muted">候选时段暂不占号；同意后仍需前台落实，落实结果以本页状态为准。</view>
+      <view wx:if="{{changesError}}" class="error">{{changesError}}</view>
+      <button class="mini-btn ghost" bindtap="loadChanges">刷新方案</button>
+      <view wx:if="{{changes.length === 0}}" class="mini-muted">暂无协调方案。</view>
+      <view wx:for="{{changes}}" wx:key="change_id" class="appt-row">
+        <view class="appt-title">候选 {{item.display}}</view>
+        <view class="appt-meta">原预约 {{item.original_id}} · {{item.state}}</view>
+        <view class="mini-muted">{{item.reason}}</view>
+        <view wx:if="{{item.canAnswer}}" class="mini-actions">
+          <button class="mini-btn secondary" data-id="{{item.change_id}}" data-accept="{{true}}" bindtap="answerChange" disabled="{{submitting}}">同意候选</button>
+          <button class="mini-btn ghost" data-id="{{item.change_id}}" data-accept="{{false}}" bindtap="answerChange" disabled="{{submitting}}">拒绝候选</button>
+        </view>
+        <view wx:if="{{item.state === '已同意'}}" class="mini-muted">已同意，等待前台落实；原预约仍保留。</view>
+        <view wx:if="{{item.state === '已撤回'}}" class="mini-muted">候选方案已由门店撤回，原预约未因本方案改动。请联系门店确认下一步安排。</view>
+      </view>
+    </view>
+  </block>
+
+  <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+  <view class="mini-foot">预约提交后可在此查看和管理。</view>
+</view>

@@ -88,7 +88,7 @@ contact_record新增kind可取预约申诉，申请必须引用本人的预约�
 | 确认预约 | 待确认或新申请 | 已确认，确认医生、占用、政策快照落地 | 全回滚，待确认不占位 |
 | 签到 | 已确认且可执行 | 候诊中，唯一queue_ticket候诊 | 不造候诊号 |
 | 取消 | 待确认/已确认/候诊中 | 已取消，释放占用，退出队列，关联复诊回待协调 | 开始接诊后拒绝 |
-| 改约 | 已确认/候诊中 | 原单已改约，新单已确认，旧队列退出，原计划改绑新单 | 保留原安排或停诊待协调 |
+| 患者自助改约 | 已确认 | 原单已改约，新单已确认，原计划改绑新单 | 失败时保留原安排；候诊中须由前台协调 |
 | 核实未到 | 已确认、从未签到、end已过 | 未到、释放占用、计划待协调、核实事件 | 已签到或未结束拒绝 |
 | 停诊 | 已发布班次 | 暂停或不可用区间有效；受影响预约待协调 | 不直接换医生 |
 
@@ -172,10 +172,12 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 | name | varchar(60) | R | 姓名 |
 | staff_type | varchar(20) | R | 牙医或其他人员 |
 | job_title | varchar(60) | R | 业务岗位 |
+| public_intro | varchar(500) | N | 经核对可公开的医生介绍，为空不展示 |
 | practice_no | varchar(60) | N;UQ | 牙医执业标识 |
 | employment_state | varchar(20) | R | 在岗或离岗 |
+| version | integer | R | 员工主档并发版本，默认1 |
 
-牙医与其他员工合表，牙医必须填写执业标识；岗位不直接决定权限。离岗停用账号并交接未完事项，保留历史接诊人。
+牙医与其他员工合表，牙医必须填写执业标识；岗位不直接决定权限。离岗停用账号并交接未完事项，保留历史接诊人。version用于全局主档修改的条件更新，不代替账号auth_version。
 
 ### credential — 人员资格
 
@@ -187,12 +189,30 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 | certificate_no | varchar(80) | R | 核实的证件编号 |
 | valid_from | date | N | 起始日期 |
 | valid_to | date | N | 截止日期 |
-| verified_by | bigint | R;FK:staff.staff_id | 核实人 |
-| verified_at | timestamptz | R | 核实时间 |
+| verified_by | bigint | N;FK:staff.staff_id | 核实人；pending可为空，须与核实时间成组 |
+| verified_at | timestamptz | N | 核实时间；pending可为空，须与核实人成组 |
 | verification_state | varchar(20) | R | pending、verified或rejected |
 | no_expiry_confirmed | boolean | R | 是否确认无有效期限制，默认false |
+| version | integer | R | 资格并发版本，默认1 |
 
-资格类别采用固定代码；UNIQUE(staff_id,credential_type,certificate_no)。日期均有值时须有序；空有效期不表示已通过有效性核验，须 verification_state=verified 且（有效期内或 no_expiry_confirmed=true）方可用于安排接诊。
+资格类别采用固定代码；UNIQUE(staff_id,credential_type,certificate_no)。日期均有值时须有序；空有效期不表示已通过有效性核验，须 verification_state=verified 且（有效期内或 no_expiry_confirmed=true）方可用于安排接诊。verified状态必须有核实人和时间；pending允许两者同时为空，不得伪造历史核验。credential_review从V007起记录追加式审核历史，迁移前记录不补造提交/核验事件。
+
+### credential_review — 资格审核历史
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| review_id | bigint | PK | 审核记录编号 |
+| credential_id | bigint | R;FK:credential.credential_id | 资格记录 |
+| action | varchar(20) | R | submit、verify、reject或revoke |
+| from_state | varchar(20) | N | 变更前状态；submit为空 |
+| to_state | varchar(20) | R | 变更后状态 |
+| actor_staff_id | bigint | R;FK:staff.staff_id | 执行人 |
+| basis | varchar(300) | N | 审核依据；submit可为空 |
+| occurred_at | timestamptz | R | 服务端时间 |
+| resulting_version | integer | R | 本次变更后的credential.version |
+
+只追加，不提供更新/删除端点；组合为submit→pending、pending→verified、pending→rejected，以及revoke:verified→rejected。V008新增撤销，不支持rejected重核；撤销保留原verified_by/verified_at，撤销执行人/时间/依据存于历史。首次驳回的verified_*仍沿用历史实现，表示首次审核执行事实，不表示资格有效。完整依据只在受控历史中，不进入通用审计摘要或普通日志。
+
 
 ### patient — 患者
 
@@ -245,6 +265,19 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 
 开始早于结束。草稿核实门店任职、资格、项目、时长和资源后发布；停诊另记不可用时段。牙医跨门店时段也不得重叠，相邻跨店班次满足两班travel_buffer_minutes较大值。草稿可带 version 直接修改；已发布班次的医生、门店、时段或服务发生实质变更，采用暂停旧班次→新建并发布→协调原预约，禁止直接改写已发布班次或历史已接诊班次。
 
+### assistant_shift — 诊疗助手班次
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| shift_id | bigint | PK | 助手班次编号 |
+| staff_id | bigint | R;FK:staff.staff_id | 员工；读取时限定为在岗的其他人员 |
+| branch_id | bigint | R;FK:branch.branch_id | 当班门店 |
+| starts_at / ends_at | timestamptz | R;开始早于结束 | 当班区间 |
+| state | varchar(20) | R;已排班或已取消 | 班次状态 |
+| version | integer | R;正数 | 版本 |
+
+同一助手的有效班次不得重叠。前台仅可读取其授权门店的未来班次；助手班次不生成号源，不代表医生执业资格。员工资料仍以 `staff` 和 `staff_branch` 为准。
+
 ### appointment — 预约就诊
 
 | 字段 | 类型 | 约束 | 含义 |
@@ -254,6 +287,8 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 | schedule_id | bigint | N;FK:schedule.schedule_id | 确认的排班 |
 | intended_dentist_id | bigint | N;FK:staff.staff_id | 申请时的意向牙医 |
 | confirmed_dentist_id | bigint | N;FK:staff.staff_id | 确认牙医快照；已确认、候诊中、接诊中、已完成必须非空且等于 schedule.dentist_id |
+| actual_started_at | timestamptz | N | 实际开始接诊，历史未知不回填 |
+| actual_dentist_id | bigint | N;FK:staff.staff_id | 实际接诊医师，与开始时间成组 |
 | starts_at | timestamptz | R | 申请或确认的开始时间 |
 | ends_at | timestamptz | R | 预计结束时间 |
 | visit_type | varchar(20) | R | 初诊或复诊 |
@@ -278,6 +313,8 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 | cancelled_at | timestamptz | N | 取消或改约的生效时刻 |
 
 预约属于一名患者和一家门店，confirmed状态必须有已发布有效排班、指定牙医和资源。小程序满足资格、服务、限制与资源条件后在一次事务中确认，无需前台逐单审批；需人工核实事项留待确认且不占资源。时段为半开区间，患者、牙医及资源均不得冲突。一个复诊计划最多一笔有效预约。改约通过新旧预约普通自关联保留历史，不能成环，同一原单最多一个已确认后继；自助改约同时占新放旧，失败保留原可用安排。诊所停诊不能继续承诺旧时段。幂等去重由 operation_request（账号＋操作＋客户端键）承载，appointment.request_key 为服务器生成 UUID（全局唯一）；request_hash 检测相同键内容变化，version 防覆盖；取消必填发起方、原因、时刻。
+
+**2026-10-30 实现补充**：活动占用状态统一为 `已确认/候诊中/接诊中`。`待确认` 不写 `resource_booking`、不进入患者/牙医排他约束、不隐藏候选、不阻止确认预约；两个待确认可指向同一时段，确认事务锁内最多一个成功。门店停用影响仍统计待确认作为未处理事项，不称为号源占用。代码与数据库排他约束采用同一状态集合。
 
 ### resource — 诊疗资源
 
@@ -366,12 +403,17 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 | suggested_from | date | R | 建议开始日期 |
 | suggested_to | date | R | 建议截止日期 |
 | duration_minutes | integer | R | 预计接诊时长 |
+| service_item_id | bigint | N;FK:service_item.item_id | 建议预约项目；未指定时可选择其他符合条件项目 |
 | purpose | varchar(200) | R | 复诊事项 |
 | state | varchar(20) | R | 待协调、已预约、已完成或已终止 |
 | supersedes_id | bigint | N;UQ;FK:followup_plan.plan_id | 被更正的旧计划 |
 | termination_reason | varchar(300) | N | 终止或更正原因 |
 
 从来源接诊取得患者，不复制患者编号。建议日期有序、时长为正；每份计划至多一笔当前有效预约。更正临床建议新增计划并终止旧计划，保留历史关联。
+
+2026-11-16 实现补充：患者从本人待协调计划进入预约时，`appointment.followup_plan_id` 与计划「已预约」同事务写入；预约取消且无其他活动关联时回待协调，改约保留关联。关联复诊就诊完成时，实际医生提交目标是否达到及非空临床记录，计划分别转「已完成」或「待协调」，并留审计。项目建议时长不等于实际排班时长，服务端以 `schedule_service.duration_minutes` 校验。目标变更、暂不复诊答复和更正版本仍未实现，不能把预约完成自动解释为复诊目标完成。
+
+2026-11-18 实现补充：V021 前向迁移增加可空 `service_item_id` 外键，原有计划保持空值。创建时只接受该医生当前启用的可预约项目；指定项目后，患者创建和改约必须选择该项目，仍需满足门店、排班、时长等实时条件。项目后来停用时历史计划保留，但不能据此绕过预约可用性校验。
 
 ### contact_record — 联系与提醒记录
 
@@ -444,6 +486,9 @@ CREATE UNIQUE INDEX uq_appointment_previous_confirmed
 | state | varchar(20) | R | 有效或已撤销 |
 | recorded_by | bigint | R;FK:staff.staff_id | 登记人员 |
 | recorded_at | timestamptz | R | 登记时间 |
+| resolved_at | timestamptz | N | 人工解除停诊时间 |
+| resolved_by | bigint | N;FK:staff.staff_id | 实际解除人；不得覆盖登记人 |
+| resolve_basis | varchar(300) | N | 人工核实并解除的依据 |
 
 起止有序；一段停诊可影响多笔排班，一笔排班也可受多段停诊影响，按牙医及时间相交计算，不建立重复对应表。新增有效停诊须识别冲突预约并标待协调；不能仅更新排班状态。撤销后重新核验资源和安排，不自动恢复已改约或取消记录。
 
@@ -542,6 +587,8 @@ UNIQUE(branch_id,item_id,effective_at)。门店首次开放项目同时建立首
 | closed_at | timestamptz | N | 接诊或退出时间 |
 | branch_id | bigint | R;FK:branch.branch_id | 候诊号所属门店，受约束冗余 |
 | checkin_channel | varchar(20) | R | 小程序或前台 |
+| verification_basis | varchar(300) | N | 前台现场核验依据；V020 新增，历史和自助签到可空，不记录证件号 |
+| exception_reason | varchar(300) | N | 前台超窗或未配置签到窗口时的人工办理理由；V020 新增 |
 
 UNIQUE(branch_id,queue_date,queue_no)，预约唯一。小程序患者在预约门店扫描短效签到码，服务端校验本人、门店和可签到时窗后自动取号，无需前台确认；人工入口可协助。branch_id须等于预约门店。过号后回队复用原号，不能记未到。「已退出」是候诊队列终态（离开队列）；「离店」是导致退出的行为/原因之一（如已签到后离店取消），两者不写成同义词。
 
@@ -643,6 +690,7 @@ UNIQUE(branch_id,queue_date,queue_no)，预约唯一。小程序患者在预约�
 | license_valid_to | date | N | 证照载明有效期，无期限另行核验 |
 | license_no_expiry_confirmed | boolean | R | 是否已明确核验“无期限”，默认false；null有效期不等于永久有效 |
 | opening_hours | varchar(200) | R | 营业时间说明，不替代医生排班 |
+| public_intro | varchar(500) | N | 经经营主体确认可公开的门店介绍，为空不展示 |
 | manager_id | bigint | R;FK:staff.staff_id | 门店负责人 |
 | state | varchar(20) | R | 草稿、待核验、营业、停用 |
 | verified_by | bigint | N;FK:staff.staff_id | 档案核验人 |
@@ -785,6 +833,8 @@ UNIQUE(branch_id,version_no)。同店生效版本按发布时间区间选择，�
 
 入库前核验供应资格和有效期；停用保留采购历史，不能用供应商名称替代稳定编号。
 
+2026-11-09 实现补充：`supplier` 复用本表，人工核验建档时服务端填充 `verified_by/verified_at`；首批要求 `valid_to` 且不早于上海业务日期。V018 只增加 `suppliers.manage` 权限，采购单、验收、库存、应付款和资产成本仍须独立落地，不能把供应商建档视作已入库。
+
 ### asset — 设备资产卡片
 
 | 字段 | 类型 | 约束 | 含义 |
@@ -891,4 +941,277 @@ UNIQUE(actor_account_id,operation,request_key)。不同账号使用相同客户�
 
 联合主键；签到末尾行锁递增，取消不回收历史号码。
 
-本阶段最终共48表（42张基线依赖表＋6张运行辅助表），不代表这些模块已全部开放界面。
+
+
+### bill — 线下收费账单
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| bill_id | bigint | PK | 账单编号 |
+| patient_id | bigint | R;FK:patient.patient_id | 患者 |
+| branch_id | bigint | R;FK:branch.branch_id | 门店 |
+| visit_id | bigint | N;FK:visit_record.visit_id | 来源就诊 |
+| plan_id | bigint | N;FK:treatment_plan.plan_id | 来源治疗计划 |
+| appointment_id | bigint | N;FK:appointment.appointment_id | 来源预约 |
+| total_cents | bigint | R | 应收总额（分） |
+| paid_cents | bigint | R | 已登记收款（分） |
+| status | varchar(20) | R | 待收款/部分收款/已收款/部分退款/已退款/已取消 |
+| version | integer | R | 并发版本 |
+| created_at | timestamptz | R | 创建时间 |
+
+金额全部使用整数分；本表只记录线下受控登记，不代表支付渠道流水。
+
+### bill_item — 账单明细
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| item_id | bigint | PK | 明细编号 |
+| bill_id | bigint | R;FK:bill.bill_id | 账单 |
+| name | varchar(100) | R | 项目名称 |
+| quantity | integer | R | 数量 |
+| unit_price_cents | bigint | R | 单价（分） |
+| amount_cents | bigint | R | 金额（分） |
+
+### payment — 线下收款登记
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| payment_id | bigint | PK | 收款登记编号 |
+| bill_id | bigint | R;FK:bill.bill_id | 账单 |
+| amount_cents | bigint | R | 收款金额（分） |
+| method | varchar(20) | R | 现金/银行卡/微信线下登记/其他线下 |
+| state | varchar(20) | R | 已登记/已退款 |
+| received_by | bigint | R;FK:staff.staff_id | 登记人 |
+| received_at | timestamptz | R | 登记时间 |
+| note | varchar(300) | N | 备注 |
+
+### refund — 线下退款登记
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| refund_id | bigint | PK | 退款编号 |
+| bill_id | bigint | R;FK:bill.bill_id | 账单 |
+| payment_id | bigint | N;FK:payment.payment_id | 原收款登记 |
+| amount_cents | bigint | R | 退款金额（分） |
+| reason | varchar(300) | R | 退款原因 |
+| status | varchar(20) | R | 待处理/已退款/已拒绝 |
+| requested_by | bigint | R | 申请人 |
+| requested_at | timestamptz | R | 申请时间 |
+| processed_at | timestamptz | N | 处理时间 |
+| processed_by | bigint | N;FK:staff.staff_id | 财务处理人；终态必填 |
+| processing_basis | varchar(300) | N | 线下处理依据；终态必填，待处理为空 |
+
+### invoice — 人工票据申请
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| invoice_id | bigint | PK | 票据申请编号 |
+| bill_id | bigint | R;FK:bill.bill_id | 账单 |
+| title | varchar(120) | R | 抬头 |
+| amount_cents | bigint | R | 申请金额（分） |
+| status | varchar(20) | R | 待开票/已开票/已拒绝/已作废/已红冲 |
+| requested_by | bigint | R | 申请人 |
+| requested_at | timestamptz | R | 申请时间 |
+| issued_at | timestamptz | N | 开票时间 |
+| issued_by | bigint | N | 开票人 |
+| note | varchar(300) | N | 备注 |
+| invoice_type | varchar(20) | R | 人工收据/增值税普通发票/增值税专用发票 |
+| buyer_type | varchar(10) | R | 购方类型：个人/单位 |
+| tax_treatment | varchar(10) | R | 应税/免税/零税率/不征税 |
+| buyer_tax_no | varchar(30) | N | 购方税号；正式票据必填 |
+| tax_rate_bps | integer | R | 税率基点（0–10000） |
+| net_amount_cents | bigint | R | 不含税金额（分） |
+| tax_amount_cents | bigint | R | 税额（分） |
+| invoice_no | varchar(40) | N | 人工票据号/发票号码 |
+| red_of_id | bigint | N;FK:invoice.invoice_id | 红冲原票 |
+| red_basis | varchar(300) | N | 红冲完成依据 |
+| voided_at | timestamptz | N | 作废时间 |
+| voided_by | bigint | N;FK:staff.staff_id | 作废人 |
+| void_reason | varchar(300) | N | 作废原因 |
+
+人工票据/税务字段快照；税额由财务确认，不自动猜测税率，也不是税控系统开票结果。
+
+
+
+### treatment_plan — 治疗计划
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| plan_id | bigint | PK | 治疗计划编号 |
+| patient_id | bigint | R;FK:patient.patient_id | 患者 |
+| branch_id | bigint | R;FK:branch.branch_id | 门店 |
+| dentist_id | bigint | R;FK:staff.staff_id | 主治医生 |
+| source_visit_id | bigint | R;FK:visit_record.visit_id | 来源就诊 |
+| title | varchar(120) | R | 计划名称 |
+| diagnosis | text | N | 诊断 |
+| state | varchar(20) | R | 草稿/待患者确认/已接受/已拒绝/已终止/已完成 |
+| estimated_total_cents | bigint | R | 预估总额（分） |
+| version | integer | R | 并发版本 |
+| created_by | bigint | R | 创建账号 |
+| created_at | timestamptz | R | 创建时间 |
+| accepted_at | timestamptz | N | 患者接受时间 |
+| acceptance_basis | varchar(300) | N | 患者接受依据 |
+| rejected_reason | varchar(300) | N | 患者拒绝原因 |
+
+治疗计划是临床建议，不等同于已实施治疗或已收费；已接受/已完成必须有接受时间和依据。
+
+### treatment_plan_item — 治疗计划明细
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| item_id | bigint | PK | 明细编号 |
+| plan_id | bigint | R;FK:treatment_plan.plan_id | 治疗计划 |
+| service_item_id | bigint | N;FK:service_item.item_id | 目录项目 |
+| name | varchar(100) | R | 项目名称 |
+| tooth_position | varchar(20) | N | 牙位 |
+| phase | varchar(40) | N | 治疗阶段 |
+| quantity | integer | R | 数量 |
+| unit_price_cents | bigint | R | 单价（分） |
+| amount_cents | bigint | R | 金额（分） |
+| status | varchar(20) | R | 计划/进行中/已完成/已取消 |
+| sort_order | integer | R | 排序 |
+
+金额为整数分；项目进度与收费分开记录，完成项目不自动生成账单。
+
+本阶段最终共56表（48张基线/运行表＋6张收费票据辅助表＋2张治疗计划表），不代表这些模块已全部开放界面。
+
+
+## 2026-10-30 数据字典：patient_selection（已由 V015 实现）
+
+### patient_selection — 前台患者选择凭证
+
+前台新患者选择凭证，V015 已新增；只存 token 摘要，不存姓名/电话/证件号原文。
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| selection_id | uuid | PK | 选择凭证编号 |
+| token_hash | char(64) | R;UQ | 一次性 token 的 SHA-256，不存明文 |
+| account_id | bigint | R;FK account | 操作账号 |
+| staff_id | bigint | R;FK staff | 操作员工 |
+| branch_id | bigint | R;FK branch | 目标预约门店 |
+| patient_id | bigint | R;FK patient | 被选择患者 |
+| source | varchar(16) | R | lookup/create |
+| verification_method | varchar(30) | R | visit_evidence/id_document |
+| verification_result | varchar(20) | R | confirmed；未确认不签发 |
+| resolution | varchar(30) | R | single_exact/manual_candidate/shared_phone/same_name |
+| in_person | boolean | R | 必须 true |
+| expires_at | timestamptz | R | 10 分钟有效期 |
+| consumed_at | timestamptz | N | 成功预约后核销 |
+| appointment_id | bigint | N;FK appointment | 核销的预约 |
+| created_at | timestamptz | R | 签发时间 |
+
+约束要点：不存姓名/电话/证件号原文；`token_hash` 唯一；`verification_result=confirmed` 才可签发；成功预约事务条件更新 `consumed_at`，失败回滚不消费；同一 token 不同幂等键最多一笔预约。姓名+电话仅用于候选匹配，不表示已核实本人。
+
+## 2026-11-09 数据字典：internal_staff_message（V017）
+
+### internal_staff_message — 店内工作消息
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| message_id | bigint | PK | 消息编号 |
+| branch_id | bigint | R;FK:branch.branch_id | 会话所在门店 |
+| frontdesk_staff_id | bigint | R;FK:staff.staff_id | 前台员工 |
+| dentist_staff_id | bigint | R;FK:staff.staff_id | 医生员工 |
+| sender_account_id | bigint | R;FK:account.account_id | 发送账号 |
+| body | varchar(500) | R | 不可修改的工作消息正文 |
+| sent_at | timestamptz | R | 服务端发送时间 |
+
+仅同门店已授权前台与医生可读写；消息不直接修改预约、诊疗或收费状态。客户端 `Idempotency-Key` 由 `operation_request` 记录，不在消息表保存明文键。
+
+## 2026-11-09 采购验收与批次库存结构（V019；业务接口仍待验收）
+
+以下六表复用 Word 6.3.49–6.3.54 的目标字段。V019 只建立受约束结构和权限；当前还不能把采购、库存页面标为真实业务。首批接口仅开放普通耗材的一次验收过账，其他类型与动作仍待实现。
+
+### stock_item — 药品耗材目录
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| stock_item_id | bigint | PK | 品种编号 |
+| code | varchar(40) | R;UQ | 内部品种代码 |
+| name | varchar(120) | R | 品种名称 |
+| kind | varchar(20) | R | 药品或耗材；首批只收耗材 |
+| specification | varchar(120) | R | 型号规格 |
+| base_unit | varchar(20) | R | 最小库存单位 |
+| approval_no | varchar(80) | N | 批准或备案标识 |
+| storage_condition | varchar(200) | R | 存储条件 |
+| enabled | boolean | R | 是否可用于新增验收 |
+
+### stock_batch — 药品耗材批次
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| batch_id | bigint | PK | 批次编号 |
+| stock_item_id | bigint | R;FK:stock_item.stock_item_id | 品种 |
+| manufacturer | varchar(120) | R | 生产厂家 |
+| holder_name | varchar(120) | N | 上市许可持有人 |
+| batch_no | varchar(80) | R | 批号 |
+| expires_on | date | R | 有效期 |
+| trace_reference | varchar(300) | N | 追溯凭证引用 |
+| state | varchar(20) | R | 合格、隔离或召回 |
+
+UNIQUE(stock_item_id,manufacturer,batch_no)；已过账引用的批次事实不得无痕改写。
+
+### warehouse — 门店库位
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| warehouse_id | bigint | PK | 库位编号 |
+| branch_id | bigint | R;FK:branch.branch_id | 所属门店 |
+| name | varchar(80) | R | 库位名称 |
+| enabled | boolean | R | 是否启用 |
+
+UNIQUE(branch_id,name)；收货明细的库位必须属于验收单门店。
+
+### purchase_receipt — 采购验收单
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| receipt_id | bigint | PK | 验收单编号 |
+| branch_id | bigint | R;FK:branch.branch_id | 收货门店 |
+| supplier_id | bigint | R;FK:supplier.supplier_id | 供应商 |
+| document_no | varchar(80) | R;UQ | 内部验收单号 |
+| supplier_document | varchar(100) | R | 供货凭证编号 |
+| received_at | timestamptz | R | 服务端验收登记时间 |
+| accepted_by | bigint | R;FK:staff.staff_id | 验收员工 |
+| state | varchar(20) | R | 草稿、已过账或作废；首批只提交已过账 |
+| request_key | varchar(64) | R;UQ | 服务端内部 UUID，不是客户端幂等键 |
+
+### purchase_receipt_line — 采购验收明细
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| receipt_line_id | bigint | PK | 明细编号 |
+| receipt_id | bigint | R;FK:purchase_receipt.receipt_id | 验收单 |
+| line_no | integer | R | 行号 |
+| batch_id | bigint | R;FK:stock_batch.batch_id | 验收批次 |
+| warehouse_id | bigint | R;FK:warehouse.warehouse_id | 入库库位 |
+| quantity | numeric(14,3) | R | 最小单位数量，正数 |
+| unit_cost | numeric(14,4) | R | 人工核对的单位取得成本，正数 |
+
+UNIQUE(receipt_id,line_no)；过账后不可无痕修改。金额是库存取得成本参考，不自动形成应付款、付款或税额。
+
+### stock_movement — 库存收发流水
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| movement_id | bigint | PK | 流水编号 |
+| receipt_line_id | bigint | R;FK:purchase_receipt_line.receipt_line_id | 成本层 |
+| warehouse_id | bigint | R;FK:warehouse.warehouse_id | 库位 |
+| care_id | bigint | N | 后续临床领用关联；目标模型 FK:care_item.care_id，首批尚无该表 |
+| reverses_id | bigint | N;UQ;FK:stock_movement.movement_id | 后续冲销原流水 |
+| transfer_key | varchar(64) | N | 后续跨库位调拨配对 |
+| kind | varchar(30) | R | 采购入库等流水类型 |
+| quantity_delta | numeric(14,3) | R | 带方向数量；首批采购入库为正 |
+| occurred_at | timestamptz | R | 业务发生时刻 |
+| posted_at | timestamptz | R | 过账时刻 |
+| operator_id | bigint | R;FK:staff.staff_id | 经办员工 |
+| approved_by | bigint | N;FK:staff.staff_id | 后续审批人 |
+| evidence | varchar(300) | R | 用途或原始凭证引用 |
+| request_key | varchar(64) | R;UQ | 服务端内部 UUID，不是客户端幂等键 |
+
+同一 receipt_line 仅一笔采购入库流水，数量必须与明细一致；流水只追加不修改删除。余额以同批次同库位 SUM(quantity_delta) 求得，首批数据库 CHECK 只允许采购入库，不开放领用、调拨、报损或盘点。
+## 2026-11-20 用户来源与本店上次实际接诊（V022）
+
+`patient.source_channel` 为可空的建档时获知渠道，允许现场、电话、转介绍、微信小程序、其他。历史记录不回填，空值表示未采集；不得依据预约渠道或建档地点猜测来源。患者通过微信小程序自助建档时写入“微信小程序”；前台建档可明确选择渠道。
+
+“上次接诊医师”不是 `patient.primary_dentist_id`，也不是预约上的计划医生。读取时从指定门店 `visit_record.completed_at IS NOT NULL` 的记录中，按完成时间和接诊编号倒序取实际 `dentist_id`，不另存冗余字段；无已完成记录时为 null。

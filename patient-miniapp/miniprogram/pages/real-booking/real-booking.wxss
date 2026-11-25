@@ -1,0 +1,31 @@
+.real-badge { display: inline-block; padding: 5rpx 12rpx; border-radius: 999rpx; background: #dff4e9; color: #1c6c52; font-size: 21rpx; }
+.real-card { margin-top: 16rpx; padding: 20rpx; border-radius: 14rpx; background: #fff; border: 1rpx solid #dcebe7; }
+.real-label { color: #617e78; font-size: 22rpx; }
+.real-value { margin-top: 6rpx; color: #193f3b; font-size: 25rpx; }
+.picker-box { margin-top: 8rpx; padding: 14rpx; border: 1rpx solid #cfe2dc; border-radius: 10rpx; font-size: 23rpx; color: #2c5e55; }
+.appt-row { padding: 12rpx 0; border-bottom: 1rpx solid #edf4f2; }
+.appt-title { font-size: 24rpx; color: #1b443e; }
+.appt-meta { margin-top: 4rpx; color: #728c86; font-size: 21rpx; }
+.section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16rpx; margin-bottom: 18rpx; }
+.section-heading .card-title { color: #193f3b; font-size: 31rpx; font-weight: 700; }
+.section-count { color: #78918b; font-size: 21rpx; white-space: nowrap; }
+.featured-appt { padding: 24rpx; border: 2rpx solid #8dcfc1; border-radius: 18rpx; background: linear-gradient(145deg, #f0faf6, #fff); }
+.appt-topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 14rpx; }
+.featured-label { color: #167567; font-size: 23rpx; font-weight: 700; }
+.featured-time { margin-top: 12rpx; color: #173f3a; font-size: 36rpx; line-height: 1.3; font-weight: 700; }
+.featured-service { margin-top: 8rpx; color: #245d54; font-size: 27rpx; font-weight: 600; }
+.status-pill { flex-shrink: 0; border-radius: 999rpx; padding: 5rpx 13rpx; font-size: 20rpx; line-height: 1.4; }
+.status-waiting { color: #8b5b11; background: #fff0cf; }
+.status-confirmed { color: #126b58; background: #dff4e9; }
+.status-muted { color: #6f827d; background: #edf2f0; }
+.queue-highlight { margin-top: 16rpx; padding: 14rpx 16rpx; border-radius: 12rpx; color: #79510f; background: #fff2d8; font-size: 24rpx; font-weight: 700; }
+.appt-actions > .mini-btn { margin-top: 18rpx; }
+.appt-secondary-actions { display: flex; gap: 12rpx; margin-top: 12rpx; }
+.appt-secondary-actions .mini-btn { flex: 1; min-width: 0; margin: 0; padding: 0 8rpx; font-size: 23rpx; }
+.group-label { margin-top: 25rpx; padding-bottom: 8rpx; color: #4d7169; font-size: 23rpx; font-weight: 650; }
+.active-row { padding: 20rpx 0; }
+.active-row .appt-title { flex: 1; min-width: 0; line-height: 1.4; }
+.history-toggle { margin-top: 18rpx; width: 100%; padding: 12rpx 8rpx; color: #1e7569; background: #f1f8f5; font-size: 23rpx; border-radius: 10rpx; }
+.history-toggle::after { border: 0; }
+.history-row { padding: 16rpx 0; }
+.history-row .appt-title { flex: 1; min-width: 0; color: #59716b; line-height: 1.4; }

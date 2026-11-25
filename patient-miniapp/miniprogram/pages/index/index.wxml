@@ -1,0 +1,43 @@
+<view class="page">
+  <view class="hero">
+    <view class="hero-title">A口腔诊所系统</view>
+    <view class="hero-subtitle">患者端 · 微信身份</view>
+  </view>
+
+  <view class="card">
+    <view class="status-row">
+      <text class="status-label">当前状态</text>
+      <text class="status-value">{{statusText}}</text>
+    </view>
+    <view class="hint">使用微信登录后，由服务端核验本人身份；不展示未经接口确认的资料。</view>
+    <button class="primary" type="default" bindtap="handleLogin" disabled="{{busy}}">
+      {{busy ? '登录中…' : '微信登录'}}
+    </button>
+    <button wx:if="{{showRetry}}" class="secondary" bindtap="handleRetry" disabled="{{busy}}">
+      重试身份核验
+    </button>
+    <button wx:if="{{showRegistration}}" class="secondary" bindtap="goRegister" disabled="{{busy}}">
+      本人建档
+    </button>
+    <button wx:if="{{showRegistration}}" class="secondary" bindtap="goBind" disabled="{{busy}}">
+      使用前台绑定凭证
+    </button>
+    <button class="secondary" bindtap="goDemo" disabled="{{busy}}">浏览演示（虚构）</button>
+    <view wx:if="{{message}}" class="notice">{{message}}</view>
+  </view>
+
+  <view class="card muted">
+    <view class="section-title">说明</view>
+    <view class="hint">未绑定微信时，可本人建档；已有旧档请使用前台当面核验后交付的一次性绑定凭证。</view>
+    <view class="hint">仅凭手机号不能认领旧档；同手机号也不等于本人。本页不提供预约或诊疗建议。</view>
+  </view>
+  <view wx:if="{{showRegistrationGuide}}" class="guide-overlay">
+    <view class="guide-panel">
+      <view class="section-title">下一步：完善个人信息</view>
+      <view class="hint">微信身份已验证。首次就诊请选择“本人建档”；如果前台已为你建立档案，请使用前台当面核验后交付的绑定凭证。</view>
+      <button class="primary" bindtap="goRegister">本人建档</button>
+      <button class="secondary" bindtap="goBind">已有档案，使用绑定凭证</button>
+      <button class="secondary" bindtap="closeRegistrationGuide">稍后再说</button>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,46 @@
+# A口腔诊所系统 后端 —— 公共配置
+# 密钥一律来自环境变量，不在本文件出现真实值。local/test/production 三个 profile 见同目录同名文件。
+# Security 与 Flyway 保持启用；启动后按所选 profile 和环境变量连接目标数据库并执行迁移。
+
+spring:
+  application:
+    name: a-dental-clinic-backend
+  profiles:
+    default: local
+  datasource:
+    # 公共连接参数；local profile 提供本地默认地址，production 必须显式注入。
+    url: ${DB_URL}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        name: ${SESSION_COOKIE_NAME:A_CLINIC_SESSION}
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:true}
+        same-site: lax
+
+# 应用自有开关（环境变量可覆盖；production profile 会强制关闭模拟与种子，见 application-production.yml）
+app:
+  checkin:
+    signing-key: ${CHECKIN_SIGNING_KEY:}
+  wechat:
+    # 真实微信接入凭证，仅经环境变量注入，无默认值；未配置时微信登录报 WECHAT_NOT_CONFIGURED，不降级 mock。
+    app-id: ${WECHAT_APP_ID:}
+    app-secret: ${WECHAT_APP_SECRET:}
+  mock:
+    wechat-enabled: ${MOCK_WECHAT_ENABLED:false}
+  seed:
+    enabled: ${APP_SEED_ENABLED:false}
+
+logging:
+  level:
+    root: info
+    cn.dental: info

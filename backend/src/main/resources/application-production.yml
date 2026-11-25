@@ -1,0 +1,31 @@
+# production profile —— 拒绝模拟身份与自动合成 seed，日志屏蔽密钥。
+# 所有密钥仅经环境变量注入（deploy/env.example 为模板），本文件不含任何真实值。
+
+spring:
+  datasource:
+    # 生产库必须由环境变量显式提供，不给任何可连通的默认值。
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+
+app:
+  wechat:
+    # 真实微信接入凭证仅经环境变量注入，无默认值；缺失时微信登录报 WECHAT_NOT_CONFIGURED，不降级 mock。
+    app-id: ${WECHAT_APP_ID:}
+    app-secret: ${WECHAT_APP_SECRET:}
+  mock:
+    # 生产硬性关闭模拟微信身份：默认 false；启动初始化器检查最终生效配置，遇到覆盖为 true 时拒绝启动。
+    wechat-enabled: false
+  seed:
+    # 生产硬性关闭应用自动合成数据初始化；独立教学库可手工导入 deploy/teacher-demo-seed.sql。
+    enabled: false
+
+logging:
+  level:
+    cn.dental: info

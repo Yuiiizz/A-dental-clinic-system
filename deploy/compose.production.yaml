@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:18.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets: [db_password]
+    volumes: [clinic_db:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:?Set POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER:?Set POSTGRES_USER}
+      SERVER_PORT: "8080"
+      SESSION_COOKIE_SECURE: "true"
+      MOCK_WECHAT_ENABLED: "false"
+      APP_SEED_ENABLED: "false"
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+    secrets: [db_password, checkin_signing_key, wechat_app_secret]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        CADDYFILE: ${CADDYFILE:-deploy/Caddyfile}
+        CLASSROOM_DEMO: "true"
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  checkin_signing_key:
+    file: ./secrets/checkin_signing_key.txt
+  wechat_app_secret:
+    file: ./secrets/wechat_app_secret.txt
+
+volumes:
+  clinic_db:
+  caddy_data:
+  caddy_config:

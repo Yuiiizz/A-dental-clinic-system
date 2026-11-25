@@ -1,0 +1,156 @@
+<view class="flow-page">
+  <view class="flow-header">
+    <view class="flow-eyebrow">门诊预约</view>
+    <view class="flow-title">选门店、选项目、选时段</view>
+    <view class="flow-sub">项目与可约时段来自后台已发布数据；候选时段不代表预占，提交时仍由服务端校验。</view>
+    <view class="flow-steps">
+      <view class="flow-step {{step === 'branch' ? 'active' : ''}} {{step !== 'branch' ? 'done' : ''}}">1 门店</view>
+      <view class="flow-step {{step === 'service' ? 'active' : ''}} {{step !== 'branch' && step !== 'service' ? 'done' : ''}}">2 项目</view>
+      <view class="flow-step {{step === 'schedule' ? 'active' : ''}} {{step === 'confirm' || step === 'success' ? 'done' : ''}}">3 时间</view>
+      <view class="flow-step {{step === 'confirm' ? 'active' : ''}} {{step === 'success' ? 'done' : ''}}">4 确认</view>
+    </view>
+  </view>
+
+  <view wx:if="{{demoBlocked}}" class="flow-card">
+    <view class="flow-card-title">当前为演示模式</view>
+    <view class="flow-muted">预约流程不会在演示模式下读取后台，也不会生成演示预约。请切换到在线服务后重新进入。</view>
+    <button class="flow-btn secondary" bindtap="back">返回</button>
+  </view>
+
+  <block wx:if="{{!demoBlocked}}">
+    <view wx:if="{{step === 'branch'}}" class="flow-card">
+      <view class="flow-card-head">
+        <view>
+          <view class="flow-card-title">先选一家门店</view>
+          <view class="flow-muted">门店公开可浏览；服务项目和可约时段需要登录后从本人授权接口读取。</view>
+        </view>
+        <text class="real-tag">真实资料</text>
+      </view>
+
+      <view wx:if="{{branchesLoading}}" class="flow-muted">正在读取门店…</view>
+      <view wx:if="{{branchesError}}" class="flow-error">{{branchesError}}<button class="flow-btn secondary" bindtap="loadBranches">重试</button></view>
+      <view wx:if="{{!branchesLoading && !branchesError && branches.length === 0}}" class="flow-empty">暂无已核验营业门店。</view>
+
+      <view wx:for="{{branches}}" wx:key="branch_id" class="branch-card {{branchId === item.branch_id ? 'selected' : ''}}" data-id="{{item.branch_id}}" bindtap="chooseBranch">
+        <view class="branch-main">
+          <view class="branch-name">{{item.name}}</view>
+          <view class="branch-meta">{{item.address}}</view>
+          <view class="branch-meta">营业：{{item.opening_hours}}</view>
+          <view wx:if="{{item.phone}}" class="branch-meta">电话：{{item.phone}}</view>
+        </view>
+        <view class="branch-pick">{{branchId === item.branch_id ? '已选择' : '选择门店 ›'}}</view>
+      </view>
+      <view class="flow-note">没有显示门店照片、地图或导航，因为当前公开接口没有照片/坐标字段；不会用虚构地址打开导航。</view>
+
+      <view wx:if="{{loginRequired}}" class="login-box">
+        <view class="login-title">已选门店：{{branch.name}}</view>
+        <view class="flow-muted">当前未登录。登录/建档后才能读取该门店的服务项目、医生排班和可约时段；登录后会回到本流程。</view>
+        <button class="flow-btn" bindtap="goLogin">登录 / 本人建档</button>
+      </view>
+    </view>
+
+    <view wx:if="{{step === 'service'}}" class="flow-card">
+      <view class="flow-card-head">
+        <view>
+          <view class="flow-card-title">选择服务项目</view>
+          <view class="flow-muted">{{branch.name}} · 只显示后台已有可约关系的项目</view>
+        </view>
+        <button class="flow-text-btn" bindtap="back">← 换门店</button>
+      </view>
+      <view wx:if="{{overviewLoading}}" class="flow-muted">正在读取项目与排班…</view>
+      <view wx:if="{{overviewError}}" class="flow-error">{{overviewError}}<button class="flow-btn secondary" bindtap="retryOverview">重试</button></view>
+      <view wx:if="{{!overviewLoading && !overviewError && services.length === 0}}" class="flow-empty">
+        该门店当前没有可自助预约的项目。可能是尚未发布排班或暂未开放；不要根据医生名录推断项目。
+      </view>
+      <view wx:if="{{services.length > 0}}" class="service-grid">
+        <view wx:for="{{services}}" wx:key="id" class="service-card {{service.id === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="chooseService">
+          <view class="service-name">{{item.name}}</view>
+          <view class="service-meta">参考 {{item.minutes}} 分钟 · ¥{{item.price}}</view>
+          <view class="service-action">查看可约时间 ›</view>
+        </view>
+      </view>
+      <view class="flow-btn-row"><button class="flow-btn secondary" bindtap="back">返回门店</button></view>
+    </view>
+
+    <view wx:if="{{step === 'schedule'}}" class="flow-card">
+      <view class="flow-card-head">
+        <view>
+          <view class="flow-card-title">{{service.name}}</view>
+          <view class="flow-muted">{{branch.name}} · 按实际返回的可约日期展示，遵守当前预约窗口</view>
+        </view>
+        <button class="flow-text-btn" bindtap="back">← 换项目</button>
+      </view>
+      <view wx:if="{{overviewLoading}}" class="flow-muted">正在刷新可约时段…</view>
+      <view wx:if="{{overviewError}}" class="flow-error">{{overviewError}}<button class="flow-btn secondary" bindtap="retryOverview">重试</button></view>
+      <view wx:if="{{!overviewLoading && !overviewError && dates.length === 0}}" class="flow-empty">
+        当前预约窗口内没有该项目的可约日期。没有可用数据时不补造日期。
+      </view>
+      <view wx:for="{{dates}}" wx:key="date" class="date-card">
+        <view class="date-head"><strong>{{item.label}}</strong><text>{{item.date}}</text></view>
+        <view class="period-row">
+          <view class="period-name">上午</view>
+          <view wx:if="{{item.morningStatus === 'available'}}" class="slot-grid">
+            <view wx:for="{{item.morning}}" wx:for-item="slot" wx:key="slot" class="slot {{selectedSlot && selectedSlot.slot === slot.slot ? 'selected' : ''}}" data-date="{{item.date}}" data-schedule="{{slot.scheduleId}}" data-slot="{{slot.slot}}" bindtap="chooseSlot">
+              <text class="slot-time">{{slot.time}}</text><text class="slot-doctor">{{slot.dentistName}}</text>
+            </view>
+          </view>
+          <view wx:elif="{{item.morningStatus === 'unavailable'}}" class="period-empty">已无可约时段</view>
+          <view wx:else class="period-empty">无排班</view>
+        </view>
+        <view class="period-row">
+          <view class="period-name">下午</view>
+          <view wx:if="{{item.afternoonStatus === 'available'}}" class="slot-grid">
+            <view wx:for="{{item.afternoon}}" wx:for-item="slot" wx:key="slot" class="slot {{selectedSlot && selectedSlot.slot === slot.slot ? 'selected' : ''}}" data-date="{{item.date}}" data-schedule="{{slot.scheduleId}}" data-slot="{{slot.slot}}" bindtap="chooseSlot">
+              <text class="slot-time">{{slot.time}}</text><text class="slot-doctor">{{slot.dentistName}}</text>
+            </view>
+          </view>
+          <view wx:elif="{{item.afternoonStatus === 'unavailable'}}" class="period-empty">已无可约时段</view>
+          <view wx:else class="period-empty">无排班</view>
+        </view>
+      </view>
+      <view class="flow-note">“已无可约时段”只表示当前没有候选，不等同于“已满”；“无排班”表示该半天没有已发布班次。</view>
+      <view class="flow-btn-row"><button class="flow-btn secondary" bindtap="back">返回项目</button></view>
+    </view>
+
+    <view wx:if="{{step === 'confirm'}}" class="flow-card confirm-card">
+      <view class="flow-card-head"><view><view class="flow-card-title">确认预约</view><view class="flow-muted">可约性最终以服务端提交校验为准。</view></view><button class="flow-text-btn" bindtap="back">← 改时间</button></view>
+      <view class="summary-list">
+        <view class="summary-row"><text>门店</text><strong>{{branch.name}}</strong></view>
+        <view class="summary-row"><text>项目</text><strong>{{service.name}} · {{service.minutes}} 分钟 · ¥{{service.price}}</strong></view>
+        <view class="summary-row"><text>医生</text><strong>{{selectedSlot.dentistName}}</strong></view>
+        <view class="summary-row"><text>日期</text><strong>{{selectedDate}}</strong></view>
+        <view class="summary-row"><text>时段</text><strong>{{selectedSlot.time}}</strong></view>
+      </view>
+      <view class="visit-box">
+        <view class="visit-label">普通预约登记类型</view>
+        <view class="visit-options">
+          <view class="visit-option {{visitType === '初诊' ? 'selected' : ''}}" data-value="初诊" bindtap="chooseVisitType">初诊</view>
+          <view class="visit-option {{visitType === '复诊' ? 'selected' : ''}}" data-value="复诊" bindtap="chooseVisitType">复诊</view>
+        </view>
+        <view wx:if="{{visitTypeLoading}}" class="flow-muted">正在读取历史就诊记录，仅用于提示；不影响你选择登记类型。</view>
+        <view wx:elif="{{visitTypeError}}" class="flow-muted">{{visitTypeError}}<button class="flow-text-btn" bindtap="retryVisitType">重试读取</button></view>
+        <view wx:elif="{{visitTypeNotice}}" class="visit-reason">{{visitTypeNotice}}</view>
+        <view class="visit-help">普通预约只记录你选择的登记类型，<text>不代表系统已核验复诊资格</text>。复诊计划预约请从“复诊计划”入口发起，需关联计划并由后端校验；两者不是同一条规则。</view>
+      </view>
+      <view wx:if="{{overviewError}}" class="flow-error">{{overviewError}}</view>
+      <button class="flow-btn" bindtap="submit" disabled="{{submitting || !visitType}}">{{submitting ? '提交中…' : '确认预约'}}</button>
+      <view class="flow-note">如服务端返回时段冲突，会刷新可约时段并要求重新选择，不会自动重复提交。</view>
+    </view>
+
+    <view wx:if="{{step === 'success'}}" class="flow-card success-card">
+      <view class="success-mark">✓</view>
+      <view class="flow-card-title">预约已确认</view>
+      <view class="flow-muted">预约编号：{{appointmentId}}</view>
+      <view class="summary-list">
+        <view class="summary-row"><text>门店</text><strong>{{branch.name}}</strong></view>
+        <view class="summary-row"><text>项目</text><strong>{{service.name}}</strong></view>
+        <view class="summary-row"><text>医生</text><strong>{{selectedSlot.dentistName}}</strong></view>
+        <view class="summary-row"><text>时间</text><strong>{{selectedDate}} {{selectedSlot.time}}</strong></view>
+      </view>
+      <button class="flow-btn" bindtap="goMine">查看我的预约</button>
+      <button class="flow-btn secondary" bindtap="restart">再约一次</button>
+    </view>
+
+    <view wx:if="{{step !== 'branch' && step !== 'success'}}" class="flow-foot">具体可约时段以提交时结果为准</view>
+  </block>
+</view>

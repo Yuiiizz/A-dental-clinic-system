@@ -1,0 +1,57 @@
+<view class="page">
+  <view class="profile-header"><view class="avatar-mark">◉</view><view class="header">
+    <view class="title">个人信息</view>
+    <view class="subtitle">登录后查看本人资料和就诊服务</view></view></view>
+
+  <view class="card">
+    <view class="row">
+      <text class="label">状态</text>
+      <text class="value status">{{statusText}}</text>
+    </view>
+    <view wx:if="{{name}}" class="row">
+      <text class="label">姓名</text>
+      <text class="value">{{name}}</text>
+    </view>
+    <view wx:if="{{name}}" class="row">
+      <text class="label">用户类型</text>
+      <text class="value">{{identityLabel}}</text>
+    </view>
+    <view class="hint">此处仅显示当前身份和申报资料；就诊、预约与费用请从下方对应入口查看。</view>
+  </view>
+
+  <view wx:if="{{profileLoading}}" class="mini-card">正在读取个人资料…</view>
+  <view wx:if="{{profile}}" class="mini-card">
+    <view class="card-title">本人资料 <text class="card-caption">诊所后台</text></view>
+    <view class="mini-muted">出生日期：{{profile.birth_date || '未填写'}}；主治医生编号：{{profile.primary_dentist_id || '未指定'}}。姓名与出生日期需联系前台核实更正。</view>
+    <view class="mini-muted">以下为当前申报资料，历史接诊记录不会随修改而重写。</view>
+    <view class="label">联系电话</view><input value="{{profileDraft.phone}}" data-field="phone" bindinput="editProfileField" disabled="{{profileSaving}}" maxlength="30" />
+    <view class="label">邮箱</view><input value="{{profileDraft.email}}" data-field="email" bindinput="editProfileField" disabled="{{profileSaving}}" maxlength="120" />
+    <view class="label">紧急联系人</view><input value="{{profileDraft.emergency_name}}" data-field="emergency_name" bindinput="editProfileField" disabled="{{profileSaving}}" maxlength="60" />
+    <view class="label">紧急联系电话</view><input value="{{profileDraft.emergency_phone}}" data-field="emergency_phone" bindinput="editProfileField" disabled="{{profileSaving}}" maxlength="30" />
+    <view class="label">过敏申报</view><picker mode="selector" range="{{allergyOptions}}" bindchange="chooseAllergy" disabled="{{profileSaving}}"><view class="mini-row">{{profileDraft.allergy_status}}　›</view></picker>
+    <view class="label">过敏说明（有或不确定时必填）</view><textarea value="{{profileDraft.allergy_notes}}" data-field="allergy_notes" bindinput="editProfileField" disabled="{{profileSaving}}" maxlength="1000" />
+    <button class="primary" bindtap="saveProfile" disabled="{{profileSaving}}">保存资料</button>
+  </view>
+  <view wx:if="{{profileMessage}}" class="notice">{{profileMessage}}<button wx:if="{{!profileSaving}}" class="secondary" bindtap="loadProfile">刷新资料</button></view>
+
+  <view wx:if="{{demoMode}}" class="notice">当前是演示模式；下方入口只打开虚构样例。<text class="mini-link" bindtap="switchToRealMode">切换到真实模式 ›</text></view>
+  <view class="mini-card">
+    <view class="card-title">我的服务</view><view class="card-sub">{{demoMode ? '演示模式：预约和记录只查看本地虚构样例' : (hasPatientSession ? '预约和就诊记录从本人授权接口读取' : '未登录时预约/记录需先登录；不会显示演示数据')}}</view>
+    <view class="mini-row" bindtap="goAppointments"><text class="label"><text class="row-icon">▦</text>我的预约</text><text class="value">查看 ›</text></view>
+    <view wx:if="{{hasPatientSession}}" class="mini-row" bindtap="goAppointments"><text class="label"><text class="row-icon">◷</text>预约协调动态</text><text class="value">查看与答复 ›</text></view>
+    <view class="mini-row" bindtap="goRecords"><text class="label"><text class="row-icon">▤</text>就诊与复诊</text><text class="value">查看 ›</text></view>
+    <view class="mini-row" bindtap="goPayments"><text class="label"><text class="row-icon">¥</text>费用与发票</text><text class="value">查看 ›</text></view>
+    <view class="mini-muted">{{hasPatientSession ? '费用与发票从本人授权接口读取；正式开票仍以财务登记和实际票据为准。' : '真实模式不展示演示账单；登录后读取本人记录。'}}</view>
+  </view>
+  <button class="secondary" bindtap="goHome">返回首页</button>
+  <button wx:if="{{hasPatientSession}}" class="secondary" bindtap="logout" disabled="{{loggingOut}}">{{loggingOut ? '退出中…' : '退出登录'}}</button>
+  <view wx:if="{{message}}" class="notice">{{message}}</view>
+
+  <button wx:if="{{showRetry}}" class="secondary" bindtap="handleVerify" disabled="{{busy}}">
+    重试身份核验
+  </button>
+  <button wx:if="{{showLogin}}" class="primary" bindtap="goLogin" disabled="{{busy}}">
+    返回登录
+  </button>
+  <view class="bottom-nav"><view class="nav-item" bindtap="goHome"><image class="nav-icon" src="/assets/icons/home.png" mode="aspectFit" /><text>首页</text></view><view class="nav-item" bindtap="goClinic"><image class="nav-icon" src="/assets/icons/clinic.png" mode="aspectFit" /><text>诊所介绍</text></view><view class="nav-item active"><image class="nav-icon" src="/assets/icons/profile.png" mode="aspectFit" /><text>个人中心</text></view></view>
+</view>

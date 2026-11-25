@@ -1,0 +1,27 @@
+.clinic-pick { display: flex; gap: 10rpx; }
+.clinic-pick .pick { flex: 1; padding: 14rpx; border-radius: 12rpx; background: #eef7f4; color: #38665e; text-align: center; font-size: 24rpx; }
+.clinic-pick .pick.active { background: #278e84; color: #fff; }
+.tag-row { margin-top: 10rpx; }
+.mini-page { padding-bottom: 150rpx; }
+.clinic-hero { position: relative; overflow: hidden; min-height: 265rpx; background: #e2f1ed; color: #174d45; }
+.clinic-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.clinic-hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg,rgba(237,249,246,.98),rgba(237,249,246,.45)); }
+.clinic-hero-text { position: relative; z-index: 1; }
+.clinic-hero .eyebrow { color: #397c70; }
+.clinic-hero .title { color: #153f3a; margin-top: 45rpx; }
+.clinic-hero .sub { color: #47776e; }
+.intro-copy { margin-top: 18rpx; font-size: 23rpx; }
+.intro-features { display: flex; justify-content: space-around; margin-top: 26rpx; padding-top: 20rpx; border-top: 1rpx solid #edf4f1; }
+.intro-features view { display: flex; flex-direction: column; align-items: center; gap: 8rpx; color: #416d63; font-size: 21rpx; }
+.feature-symbol { display: flex; align-items: center; justify-content: center; width: 62rpx; height: 62rpx; border-radius: 20rpx; background: #e9f7f2; color: #228779; font-size: 32rpx; }
+
+.intro-features view:active, .clinic-pick .pick:active { opacity: .7; }
+.intro-card { padding: 28rpx; }
+.public-directory { margin-bottom: 18rpx; }
+.public-picks { display: flex; gap: 10rpx; flex-wrap: wrap; margin: 20rpx 0; }
+.public-pick { padding: 12rpx 18rpx; border-radius: 16rpx; background: #edf5f2; color: #356b62; font-size: 23rpx; }
+.public-pick.active { background: #2a9d8f; color: #fff; }
+.branch-heading { margin: 12rpx 0 18rpx; font-size: 32rpx; font-weight: 700; color: #174e43; }
+.intro-panel { padding: 20rpx 22rpx; margin-bottom: 16rpx; background: #f1faf6; border: 1rpx solid #d5ebe1; border-radius: 16rpx; }
+.intro-heading { font-size: 24rpx; font-weight: 700; color: #1d6857; }
+.intro-panel .intro-copy { margin-top: 10rpx; color: #365b51; font-size: 23rpx; line-height: 1.65; white-space: pre-wrap; }

@@ -1,0 +1,56 @@
+# ---- 操作系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# ---- Java / Maven ----
+**/target/
+*.class
+hs_err_pid*
+replay_pid*
+
+# ---- Node / 前端 ----
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+coverage/
+playwright-report/
+test-results/
+
+# ---- 环境变量与密钥（仅保留模板）----
+.env
+.env.*
+!.env.example
+deploy/*.env
+!deploy/env.example
+deploy/secrets/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- 微信开发者工具 ----
+patient-miniapp/project.private.config.json
+patient-miniapp/miniprogram_npm/
+patient-miniapp/node_modules/
+
+# 本地代理交接与临时 Office 文件，不属于课程提交材料
+DEEPSEEK_*.md
+handoff.md
+**/~$*.docx
+
+# 仅提交最终课程报告及可编辑图源；本地修订稿不进入仓库
+系统分析与设计文档/*.docx
+!系统分析与设计文档/1602240113徐乐怡.docx
+系统分析与设计文档/*.pdf
+
+# 部署传输包与本地验收截图不属于源码
+deploy/operations/*.tar.gz
+deploy/operations/*-deployment.md
+docs/screenshots/
+docs/references/

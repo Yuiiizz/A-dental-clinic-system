@@ -1,0 +1,74 @@
+<view class="mini-page">
+  <view class="demo-banner">{{demoNotice}}</view>
+  <view class="mini-hero">
+    <view class="eyebrow">预约挂号</view>
+    <view class="title">选择项目与时段</view>
+    <view class="sub">指定医生后，复诊优先该医生；正常预约无需提前同意替诊。</view>
+  </view>
+
+  <view wx:if="{{!demoEnabled}}" class="mini-card">
+    <view class="card-title">演示已关闭</view>
+    <view class="mini-muted">关闭演示后不能创建演示预约。请返回首页开启演示，或使用登录/建档入口。</view>
+    <button class="mini-btn secondary" bindtap="backHome">返回首页</button>
+  </view>
+
+  <block wx:else>
+    <view class="mini-card">
+      <view class="card-title">1. 选择项目</view>
+      <view class="pick-grid">
+        <view wx:for="{{items}}" wx:key="*this" class="pick {{selectedItem === item ? 'active' : ''}}" data-value="{{item}}" bindtap="pickItem">{{item}}</view>
+      </view>
+    </view>
+
+    <view class="mini-card">
+      <view class="card-title">2. 选择医生</view>
+      <view class="pick-grid">
+        <view wx:for="{{doctors}}" wx:key="id" class="pick {{doctorId === item.id ? 'active' : ''}}" data-id="{{item.id}}" bindtap="pickDoctor">
+          {{item.name}} · {{item.title}}
+        </view>
+      </view>
+      <view wx:for="{{doctors}}" wx:key="id">
+        <view wx:if="{{doctorId === item.id}}" class="doctor-note">
+          指定医生：{{item.name}} · {{item.specialties}}。排班：{{item.schedule}}。复诊优先主治。
+        </view>
+      </view>
+      <button class="mini-btn ghost" bindtap="proposeSubstitute">模拟“原医生临时停诊，提出替诊”</button>
+    </view>
+
+    <view wx:if="{{substitute}}" class="mini-card substitute-card">
+      <view class="card-title">临时替诊请求</view>
+      <view class="mini-row"><text class="label">原医生</text><text class="value">{{substitute.originalDoctor}}</text></view>
+      <view class="mini-row"><text class="label">拟替诊医生</text><text class="value">{{substitute.newDoctor}}</text></view>
+      <view class="mini-row"><text class="label">时段</text><text class="value">{{substitute.slot}}</text></view>
+      <view class="mini-row"><text class="label">原因</text><text class="value">{{substitute.reason}}</text></view>
+      <view class="mini-actions">
+        <button class="mini-btn secondary" bindtap="rejectSubstitute">拒绝替诊</button>
+        <button class="mini-btn" bindtap="acceptSubstitute">接受替诊</button>
+      </view>
+      <view class="mini-muted">拒绝不会自动确认替诊，也不会取消原预约。</view>
+    </view>
+    <view wx:if="{{substituteMessage}}" class="substitute-message">{{substituteMessage}}</view>
+
+    <view class="mini-card">
+      <view class="card-title">3. 选择日期与时段</view>
+      <input class="mini-input" type="date" value="{{date}}" bindinput="onDateChange" />
+      <view class="pick-grid">
+        <view wx:for="{{slots}}" wx:key="*this" class="pick slot {{slot === item ? 'active' : ''}}" data-value="{{item}}" bindtap="pickSlot">{{item}}</view>
+      </view>
+    </view>
+
+    <view class="mini-card">
+      <view class="card-title">预约确认</view>
+      <view class="mini-row"><text class="label">项目</text><text class="value">{{selectedItem}}</text></view>
+      <view class="mini-row"><text class="label">医生</text><text class="value"><block wx:for="{{doctors}}" wx:key="id"><block wx:if="{{doctorId === item.id}}">{{item.name}}</block></block></text></view>
+      <view class="mini-row"><text class="label">日期/时段</text><text class="value">{{date}} {{slot || '未选择'}}</text></view>
+      <view wx:if="{{confirmed}}" class="success">{{resultText}}</view>
+      <button class="mini-btn" bindtap="confirm" disabled="{{submitting || confirmed}}">{{submitting ? '生成中…' : confirmed ? '演示预约已生成（未提交）' : '生成演示预约（不提交）'}}</button>
+      <button wx:if="{{confirmed}}" class="mini-btn secondary" bindtap="openAppointments">查看我的预约</button>
+      <button class="mini-btn secondary" bindtap="goRealBooking">去预约挂号</button>
+      <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+    </view>
+  </block>
+
+  <view class="mini-foot">演示预约不写入后台、不占用真实号源，也不发起真实支付；只在本次小程序运行期间一致，刷新/重启后重置。</view>
+</view>

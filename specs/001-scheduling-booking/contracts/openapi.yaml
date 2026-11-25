@@ -1,0 +1,6039 @@
+openapi: 3.0.3
+info:
+  title: A口腔诊所系统 — 第一阶段排班预约接口契约
+  version: 0.1.0
+  description: |
+    包含已实现接口与规划接口；不得仅因列入契约就认定实现。具体差距参见 docs/design/appointment-contract-gap.md，所有示例为合成数据。
+    - ID 一律以字符串传输（内部 bigint）；时间 RFC3339 且带时区（如 2026-11-01T09:00:00+08:00）；日期 YYYY-MM-DD。
+    - 状态保留中文报告值（如 已确认），基础设施状态用英文（draft/published、pending/verified/rejected）。
+    - 服务端计算字段（confirmed_dentist_id、ends_at、state、coordination_state、resource 分配、reviewed_by、resolved_by、resolved_at、approved_by、approved_at 等）只出现在响应，不接受客户端指定。
+    - **未知请求字段一律拒绝**：所有请求体对象 `additionalProperties: false`，服务端对未声明字段返回 422。
+    - **鉴权三分**：患者不透明 Bearer（服务端签发，仅存摘要）；员工 HttpOnly Cookie + CSRF 头；公开接口无鉴权。
+    - **幂等与并发控制（逐接口声明）**：
+      * 幂等键必填——新建/签发/生成类业务变更，带 `Idempotency-Key` 头（作用域 账号+操作+键，operation_request 去重）；
+      * 幂等键 + `expected_version`——修改既有记录的乐观锁（目标表有 version 列，请求体带整数 `expected_version`）；
+      * 合理例外——登录/登出/改密、单次消费凭证（注册/绑定）、天然幂等的 set 型 PUT/DELETE（同值重复无副作用）。
+      * 目标表无 version 列的状态迁移（资源禁用解除、履约事件复核）用「幂等键 + 状态前置条件」保证，不带 expected_version。
+    - 版本字段统一命名 `expected_version`。
+    - 每笔预约单一 item_id；票据接口仅用于人工登记，不代表税控实际开票。
+servers:
+  - url: /api/v1
+    description: 相对地址；前端与网关按部署环境拼接域名，数据库仅内网可达。
+tags:
+  - name: 身份与会话
+  - name: 基础配置与排班
+  - name: 公开查询与患者预约
+  - name: 协调
+  - name: 签到
+  - name: 政策
+  - name: 临床与治疗
+  - name: 收费与票据
+  - name: 患者自助
+  - name: 店内沟通
+  - name: 采购与供应商
+
+paths:
+  /staff/suppliers:
+    get:
+      tags: [采购与供应商]
+      operationId: staffSupplierList
+      summary: 读取已核验供应商档案
+      description: 仅显式获得 suppliers.manage 的负责人或库管可见；返回最小列表，不含资质依据全文。
+      security: [{StaffSessionCookie: []}]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 按 supplier_id 升序分页
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/SupplierRow'}}
+                  next_cursor: {type: string, nullable: true}
+        '403': {description: 无供应商管理权限}
+    post:
+      tags: [采购与供应商]
+      operationId: staffSupplierCreate
+      summary: 人工核验后建立供应商档案
+      description: 只建供应主体，不生成采购、入库或应付款；同键同内容重放返回当前档案。
+      security: [{StaffSessionCookie: [], StaffCsrf: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, credit_code, qualification_ref, valid_to]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 120}
+                credit_code: {type: string, minLength: 1, maxLength: 30}
+                qualification_ref: {type: string, minLength: 1, maxLength: 300}
+                valid_to: {type: string, format: date}
+      responses:
+        '201':
+          description: 创建成功或同键重放
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/SupplierDetail'}
+        '403': {description: 无供应商管理权限}
+        '409': {description: 主体标识已存在或幂等键内容冲突}
+        '422': {description: 资质日期或字段无效}
+  /staff/suppliers/{id}:
+    get:
+      tags: [采购与供应商]
+      operationId: staffSupplierDetail
+      summary: 读取供应商资质核验摘要
+      security: [{StaffSessionCookie: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: 供应商详情
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/SupplierDetail'}
+        '404': {description: 供应商不存在}
+  /staff/stock-items:
+    get:
+      tags: [采购与供应商]
+      operationId: staffStockItemList
+      summary: 按编码主档读取普通耗材
+      description: 需库存读取权限和至少一个有效门店授权链；含启用与停用目录，不读取药品。
+      security: [{StaffSessionCookie: []}]
+      parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {description: 按 stock_item_id 稳定分页, content: {application/json: {schema: {$ref: '#/components/schemas/StockItemPage'}}}}
+        '403': {description: 无库存读取权限}
+    post:
+      tags: [采购与供应商]
+      operationId: staffStockItemCreate
+      summary: 建立普通耗材目录
+      description: 仅建立耗材主档，不自动生成批次、库存或采购付款。
+      security: [{StaffSessionCookie: [], StaffCsrf: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StockItemCreate'}}}}
+      responses:
+        '201': {description: 建档或同键重放, content: {application/json: {schema: {$ref: '#/components/schemas/StockItemResult'}}}}
+        '403': {description: 无配置权限}
+        '409': {description: 编码重复或幂等键冲突}
+        '422': {description: 输入无效或未知字段}
+  /staff/warehouses:
+    get:
+      tags: [采购与供应商]
+      operationId: staffWarehouseList
+      summary: 读取授权门店库位
+      description: 只返回指定授权门店的库位，包含历史停用库位。
+      security: [{StaffSessionCookie: []}]
+      parameters:
+        - {name: branch_id, in: query, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 按 warehouse_id 稳定分页, content: {application/json: {schema: {$ref: '#/components/schemas/WarehousePage'}}}}
+        '403': {description: 无该门店读取权限}
+    post:
+      tags: [采购与供应商]
+      operationId: staffWarehouseCreate
+      summary: 建立本店库位
+      description: 库位归属门店由请求指定，服务端核对同角色权限与有效任职。
+      security: [{StaffSessionCookie: [], StaffCsrf: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/WarehouseCreate'}}}}
+      responses:
+        '201': {description: 建档或同键重放, content: {application/json: {schema: {$ref: '#/components/schemas/WarehouseResult'}}}}
+        '403': {description: 无该门店配置权限}
+        '409': {description: 库位名称重复或幂等键冲突}
+        '422': {description: 输入无效或未知字段}
+  /staff/purchase-receipts:
+    get:
+      tags: [采购与供应商]
+      operationId: staffPurchaseReceiptList
+      summary: 读取本店已过账验收单
+      description: 草稿与作废记录不对外展示，可按批次追溯所有已过账来源。
+      security: [{StaffSessionCookie: []}]
+      parameters:
+        - {name: branch_id, in: query, required: true, schema: {type: string}}
+        - {name: batch_id, in: query, required: false, schema: {type: string}, description: 按批次追溯来源}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 按 receipt_id 稳定分页，仅已过账, content: {application/json: {schema: {$ref: '#/components/schemas/ReceiptPage'}}}}
+        '403': {description: 无该门店读取权限}
+    post:
+      tags: [采购与供应商]
+      operationId: staffPurchaseReceiptPost
+      summary: 人工核对并一次过账普通耗材验收
+      description: 同事务写草稿、1–50 明细、正向流水后转已过账；不生成付款、应付款、税额或临床领用。重放只返回当前可见单据，不重复入库。
+      security: [{StaffSessionCookie: [], StaffCsrf: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReceiptCreate'}}}}
+      responses:
+        '201': {description: 已过账或同键重放, content: {application/json: {schema: {$ref: '#/components/schemas/ReceiptResult'}}}}
+        '403': {description: 无该门店验收入库权限}
+        '409': {description: 资质、库位、批次、单号冲突或幂等键冲突}
+        '422': {description: 数量、成本、日期或字段无效}
+  /staff/purchase-receipts/{id}:
+    get:
+      tags: [采购与供应商]
+      operationId: staffPurchaseReceiptDetail
+      summary: 读取已过账验收单与明细
+      description: 只显示本店已过账事实；不存在、未过账和无权目标统一 404。
+      security: [{StaffSessionCookie: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: 验收详情, content: {application/json: {schema: {$ref: '#/components/schemas/ReceiptResult'}}}}
+        '404': {description: 不存在、未过账或不可访问}
+  /staff/stock-balances:
+    get:
+      tags: [采购与供应商]
+      operationId: staffStockBalanceList
+      summary: 按已过账流水汇总本店批次账面余额
+      description: 仅算已过账验收单；账面余额不代表临床可直接领用。以 batch_id 查询验收列表追溯所有来源。
+      security: [{StaffSessionCookie: []}]
+      parameters:
+        - {name: branch_id, in: query, required: true, schema: {type: string}}
+        - {name: warehouse_id, in: query, required: false, schema: {type: string}}
+        - {name: stock_item_id, in: query, required: false, schema: {type: string}}
+        - {name: batch_id, in: query, required: false, schema: {type: string}}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 以 warehouse_id:batch_id 为游标分页, content: {application/json: {schema: {$ref: '#/components/schemas/StockBalancePage'}}}}
+        '403': {description: 无该门店读取权限}
+  /staff/appointments/{id}/start-visit:
+    post:
+      tags: [临床与治疗]
+      operationId: staffStartVisit
+      description: 由确认医生本人记录服务端实际开始时间，重复开始不重置时间。
+      summary: 确认医生本人开始接诊，重复操作不重置时间
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 已开始接诊}
+        '403': {description: 无权限或不是确认接诊医生}
+        '409': {description: 当前状态不允许开始}
+
+  # ============ 身份与会话 ============
+  /auth/wechat:
+    post:
+      tags: [身份与会话]
+      operationId: authWechatLogin
+      summary: 微信登录（换身份）
+      description: 仅接受 code，服务端换取 openid；已绑定返回业务会话，未绑定返回短期 registration_token。绝不信任客户端自报 openid。公开入口，code 单次使用，属幂等例外（不要求 Idempotency-Key）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: 微信登录临时 code，单次使用
+      responses:
+        '200':
+          description: 会话分支或注册分支（二选一，见 discriminator）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WechatLoginResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/WechatExchangeFailed'
+        '503':
+          $ref: '#/components/responses/WechatNotConfigured'
+
+  /auth/patient-register:
+    post:
+      tags: [身份与会话]
+      operationId: authPatientRegister
+      summary: 本人建档并建立账号
+      description: 消费短期 registration_token，创建本人档案与账号。allergy_status 为 有/不确定 时 allergy_notes 必填。registration_token 单次消费，属幂等例外（重试返回「凭证已消费」而非重复建档）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientSelfRegisterRequest'
+      responses:
+        '200':
+          description: 返回业务会话及本人档案
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientSessionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/patient-bind:
+    post:
+      tags: [身份与会话]
+      operationId: authPatientBind
+      summary: 核验并绑定旧档
+      description: 消费 registration_token + 前台签发的一次性 binding_token，核验后原子绑定旧档（两个凭证单次消费、各最多5次失败）。属幂等例外。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [registration_token, binding_token]
+              properties:
+                registration_token:
+                  type: string
+                binding_token:
+                  type: string
+      responses:
+        '200':
+          description: 返回业务会话
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientSessionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /staff/patients/{id}/binding-token:
+    post:
+      tags: [身份与会话]
+      operationId: staffIssueBindingToken
+      summary: 前台签发一次性绑定凭证
+      description: |
+        有本店业务范围的前台，在服务端门店权限下，以姓名+电话匹配档案并记录明确的线下本人核验
+        （verification_method + in_person）后签发短期一次性凭证；仅该次响应显示明文。姓名+电话只匹配档案、
+        不能证明本人。预约引用若提供须核对患者与门店。幂等键必填；同键同内容重放 binding_token=null 且
+        replayed=true，只返回已签发元信息与当前状态。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/PatientId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branch_id, patient_name, patient_phone, verification_method, in_person]
+              properties:
+                branch_id:
+                  type: string
+                patient_name:
+                  type: string
+                  maxLength: 60
+                patient_phone:
+                  type: string
+                  maxLength: 30
+                appointment_id:
+                  type: string
+                  description: 可选；须与该患者及该门店一致
+                verification_method:
+                  $ref: '#/components/schemas/VerificationMethod'
+                in_person:
+                  type: boolean
+                  description: 前台确认本人到场，必须为 true
+      responses:
+        '200':
+          description: 一次性绑定凭证（首发明文，重放不返回明文）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingTokenIssueResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /staff/patients/{id}/binding-token/reissue:
+    post:
+      tags: [身份与会话]
+      operationId: staffReissueBindingToken
+      summary: 前台重签绑定凭证
+      description: |
+        显式重签：previous_challenge_ref 必填并须仍是当前待用凭证，患者锁内原子撤销旧凭证再签新凭证；
+        过时引用 409，避免两名前台相互撤销刚签发的新凭证。已绑定患者拒绝首发/重签。幂等键必填；
+        同键同内容重放 binding_token=null 且 replayed=true。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/PatientId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branch_id, patient_name, patient_phone, verification_method, in_person, previous_challenge_ref]
+              properties:
+                branch_id:
+                  type: string
+                patient_name:
+                  type: string
+                  maxLength: 60
+                patient_phone:
+                  type: string
+                  maxLength: 30
+                appointment_id:
+                  type: string
+                  description: 可选；须与该患者及该门店一致
+                verification_method:
+                  $ref: '#/components/schemas/VerificationMethod'
+                in_person:
+                  type: boolean
+                previous_challenge_ref:
+                  type: string
+                  description: 被重签凭证的 challenge_ref（UUID）
+      responses:
+        '200':
+          description: 重签后的一次性绑定凭证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingTokenIssueResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/staff-login:
+    post:
+      tags: [身份与会话]
+      operationId: authStaffLogin
+      summary: 员工登录
+      description: 登录，属幂等例外。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [login_name, password]
+              properties:
+                login_name:
+                  type: string
+                  maxLength: 100
+                  description: 去首尾空白转小写后，匹配 [a-z0-9][a-z0-9._-]{2,99}
+                password:
+                  type: string
+                  maxLength: 72
+                  description: 不去空白或截断；最多72个UTF-8字节
+      responses:
+        '200':
+          description: Cookie 会话及 CSRF 令牌
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [must_change_password, csrf_token]
+                    properties:
+                      must_change_password:
+                        type: boolean
+                      csrf_token:
+                        type: string
+                        description: 仅本次展示，供后续状态变更请求头使用
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/password-change:
+    post:
+      tags: [身份与会话]
+      operationId: authPasswordChange
+      summary: 修改密码
+      description: 撤销旧会话，返回新会话；不记录明文。会话撤销型，属幂等例外。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                  maxLength: 72
+                new_password:
+                  type: string
+                  minLength: 12
+                  maxLength: 72
+                  description: 至少12个Unicode码点、最多72个UTF-8字节，不能与旧密码相同
+      responses:
+        '200':
+          description: 新会话（Cookie）及 CSRF 令牌
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      csrf_token:
+                        type: string
+
+  /auth/logout:
+    post:
+      tags: [身份与会话]
+      operationId: authLogout
+      summary: 退出登录
+      description: 撤销当前会话，天然幂等，属幂等例外。患者 Bearer 或员工 Cookie。
+      security:
+        - {PatientBearer: []}
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      responses:
+        '204':
+          description: 已撤销
+
+  /auth/me:
+    get:
+      tags: [身份与会话]
+      operationId: authMe
+      summary: 当前会话本人信息
+      description: 本人最小信息及各角色门店范围。
+      security:
+        - {PatientBearer: []}
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      responses:
+        '200':
+          description: 本人信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+
+  /me/profile:
+    get:
+      tags: [身份与会话]
+      operationId: meGetProfile
+      summary: 本人档案
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200':
+          description: 本人档案
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientProfile'
+    post:
+      tags: [身份与会话]
+      operationId: meUpdateProfile
+      summary: 修改本人资料（含过敏申报）
+      description: 乐观锁：patient.version 用 expected_version 校验。未提供的联系方式沿用当前值；提供空字符串清空可选联系方式。allergy_status 为 有/不确定 时 allergy_notes 必填；改为其他状态时清空当前过敏说明。不修改历史接诊快照。同键重放返回当前权威档案。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [allergy_status, expected_version]
+              properties:
+                phone:
+                  type: string
+                  maxLength: 30
+                email:
+                  type: string
+                  maxLength: 120
+                emergency_name:
+                  type: string
+                  maxLength: 60
+                emergency_phone:
+                  type: string
+                  maxLength: 30
+                allergy_status:
+                  $ref: '#/components/schemas/AllergyStatus'
+                allergy_notes:
+                  type: string
+                  maxLength: 1000
+                  description: 过敏或不确定时必填
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 更新后的档案
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientProfile'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============ 基础配置与排班 ============
+  /staff/branches:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffListBranches
+      summary: 门店列表
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 门店分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchPage'
+    post:
+      tags: [基础配置与排班]
+      operationId: staffCreateBranch
+      summary: 新增门店
+      description: |
+        唯一 organization 的负责人（responsible_staff_id）、owner 角色且具备 branches.create、员工在岗、已完成强制改密时创建
+        state=草稿、version=1 的门店。organization_id 由服务端决定；manager_id 首期必须等于当前创建者。
+        创建事务为目标 owner 角色建立本店 scope 和已核实 staff_branch，并递增 auth_version、撤销该账号会话；
+        首次响应 reauthentication_required=true，客户端须重新登录。幂等键必填；重放不再次授 scope、不递增版本/不撤会话。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRequest'
+      responses:
+        '201':
+          description: 已创建并返回权威门店详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/branches/{id}:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffGetBranch
+      summary: 门店管理详情
+      description: 具备本店 branch.configure、同一 role 的 branch scope 且 staff_branch 有效已核实的负责人可读；无权限目标与不存在统一404。详情不含营业区间、患者或财务信息。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: 门店档案与核验摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [基础配置与排班]
+      operationId: staffUpdateBranch
+      summary: 修改门店档案
+      description: |
+        负责人；只修改请求中出现的字段，缺省不修改，必填字段不可显式 null。
+        营业状态仅允许名称/电话/营业说明/代码等普通字段；执业地址、许可证及有效期变更必须先停用。
+        manager_id、organization_id、state、version、verified_by/verified_at、license_no_expiry_confirmed 不接受。
+        许可事实变化自动清除核验标记和无期限确认；版本冲突零写入。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchPatchRequest'
+      responses:
+        '200':
+          description: 已修改；返回当前状态和权威版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchMutationResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/branches/{id}/submit:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffSubmitBranch
+      summary: 提交门店核验
+      description: 草稿 → 待核验；负责人本店权限；Idempotency-Key + expected_version。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchVersionRequest'
+      responses:
+        '200':
+          description: 已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchMutationResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/branches/{id}/verify:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffVerifyBranch
+      summary: 核验门店并置为营业
+      description: 待核验 → 营业；verification_basis 必填；许可证有效期未过期，或明确确认无期限。核验人和时间取当前会话/Clock，不接受客户端伪造。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchVerifyRequest'
+      responses:
+        '200':
+          description: 已核验并营业
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchMutationResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/branches/{id}/disable:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffDisableBranch
+      summary: 停用门店
+      description: 营业 → 停用；原因必填；存在未结束已发布班次或活动预约时 409 并返回精确影响摘要，不自动取消/改约。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchDisableRequest'
+      responses:
+        '200':
+          description: 已停用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchMutationResult'
+        '409':
+          description: 状态/版本冲突，或存在未结束排班/预约
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BranchImpactError'
+                  - $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/branches/{id}/reopen:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffReopenBranch
+      summary: 重新打开门店
+      description: 停用 → 待核验；清除核验标记和无期限确认，不直接恢复营业、旧预约或排班。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchVersionRequest'
+      responses:
+        '200':
+          description: 已进入待核验
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchMutationResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+
+  /staff/staff-members:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffListStaffMembers
+      summary: 员工列表
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 员工分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMemberPage'
+    post:
+      tags: [基础配置与排班]
+      operationId: staffCreateStaffMember
+      summary: 新增员工与资格信息
+      description: 负责人管理所辖任职；牙医必须填写执业标识；不自动创建临床权限。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMemberRequest'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMemberDetailResult'
+
+  /staff/staff-members/{id}:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffGetStaffMember
+      summary: 员工详情
+      description: 全局负责人可读取最小详情；门店负责人只可读取已授权任职范围内的员工，其他门店关系不返回。无权限与不存在统一404。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      responses:
+        '200':
+          description: 员工详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMemberDetailResult'
+
+  /staff/staff-members/{id}/credentials:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffAddCredential
+      summary: 录入待核验资格
+      description: 仅全局组织负责人；创建pending资格并追加submit历史，不授予角色/账号。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRequest'
+      responses:
+        '201':
+          description: 已录入pending资格
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialDetailResult'
+
+  /staff/staff-members/{id}/credentials/{credential_id}/review:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffReviewCredential
+      summary: 首次审核资格
+      description: 仅pending→verified或pending→rejected；仅全局组织负责人；不提供撤销、重核或证件事实修改。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialReviewRequest'
+      responses:
+        '200':
+          description: 审核后的资格
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialDetailResult'
+
+  /staff/staff-members/{id}/credentials/{credential_id}/revoke:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffRevokeCredential
+      summary: 撤销已核验资格
+      description: 仅全局组织负责人，verified→rejected并追加revoke历史；保留原核验事实及已有预约占用。幂等重放返回当前资格视图，不重复写入。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRevokeRequest'
+      responses:
+        '200':
+          description: 审核后的资格
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialDetailResult'
+
+  /staff/staff-members/{id}/credentials/{credential_id}/reviews:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffListCredentialReviews
+      summary: 资格审核历史
+      description: 仅全局组织负责人；只读追加式历史，不返回证书原文；稳定review_id游标，默认20最大100。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 审核历史分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialReviewPage'
+
+  /staff/staff-members/{id}/credentials/{credential_id}/facts:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffGetCredentialFacts
+      summary: 受控读取资格证件事实
+      description: 仅唯一组织负责人可在实际核验前单条读取证书编号、类别、有效日期及当前状态；每次成功读取留不含证书编号的审计。列表和员工详情不返回证书编号；响应禁止缓存。读取本身不代表证件真实或资格审核通过。
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 证件事实（Cache-Control no-store）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialFactsResult'
+
+  /staff/staff-members/{id}/branches/{branch_id}:
+    put:
+      tags: [基础配置与排班]
+      operationId: staffSetBranchAssignment
+      summary: 设置员工门店任职
+      description: 负责人；停用前列受影响班次。set 型 PUT，同值重复无副作用，属幂等例外（staff_branch 无 version 列，verified_at 由服务端记录）。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - $ref: '#/components/parameters/BranchPathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled, verification_basis]
+              properties:
+                enabled:
+                  type: boolean
+                verification_basis:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已更新
+
+  /staff/staff-members/{id}/services/{item_id}:
+    put:
+      tags: [基础配置与排班]
+      operationId: staffSetServiceScope
+      summary: 设置牙医可开展项目
+      description: 目标按项目契约，当前尚未注册此路径，客户端不得调用；当前可用的整组配置路径见 /staff/scheduling/staff/{staffId}/services。后续需收敛为单一契约。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled, verification_basis]
+              properties:
+                enabled:
+                  type: boolean
+                verification_basis:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已更新
+
+  /staff/scheduling/staff/{staffId}/services:
+    put:
+      tags: [基础配置与排班]
+      operationId: staffReplaceDoctorServiceScope
+      summary: 替换医生可开展项目集合（现行接口）
+      description: 仅唯一组织负责人。必须填写实际核实依据；有项目仍用于未结束排班时拒绝移除并保持原集合。差异与依据同事务审计；同值请求无额外写入。医生范围不等于门店服务开放或可预约号源。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - in: path
+          name: staffId
+          required: true
+          schema: {type: integer, format: int64, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [item_ids, approval_basis]
+              properties:
+                item_ids:
+                  type: array
+                  uniqueItems: true
+                  items: {type: integer, format: int64, minimum: 1}
+                approval_basis:
+                  type: string
+                  minLength: 1
+                  maxLength: 300
+      responses:
+        '200': {description: 已保存当前范围}
+        '409': {description: 移除项目仍关联未结束排班}
+        '422': {description: 输入或依据无效}
+
+  /staff/service-items:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffListServiceItems
+      summary: 项目列表
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 项目分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceItemPage'
+    post:
+      tags: [基础配置与排班]
+      operationId: staffCreateServiceItem
+      summary: 新增项目
+      description: 负责人；价格仅保存配置，不开账单。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceItemRequest'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceItemResult'
+
+  /staff/branches/{id}/services/{item_id}:
+    put:
+      tags: [基础配置与排班]
+      operationId: staffSetBranchService
+      summary: 设置门店服务开放与价格
+      description: 同时维护初始/变动价格历史，不能只改快照。branch_service 无 version 列；调价追加价格历史行，故带 Idempotency-Key 防重试重复追加。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/ItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled, auto_bookable, current_price, reason]
+              properties:
+                enabled:
+                  type: boolean
+                auto_bookable:
+                  type: boolean
+                current_price:
+                  type: string
+                  description: 数字字符串（numeric(12,2)），避免浮点误差
+                reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已更新
+
+  /staff/resources:
+    get:
+      description: 只读资源下拉；需要 branch_id 且账号具备该店 branch.configure 与已核验任职。只返回该门店资源，不改变资源状态。
+      tags: [基础配置与排班]
+      operationId: staffListResources
+      summary: 资源列表
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchIdQuery'
+      responses:
+        '200':
+          description: 指定授权门店的资源下拉列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [items, branch_id, next_cursor]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [resource_id, name, resource_type, operating_state, branch_id, branch_name]
+                          properties:
+                            resource_id: {type: string}
+                            name: {type: string}
+                            resource_type: {type: string}
+                            operating_state: {type: string}
+                            branch_id: {type: string}
+                            branch_name: {type: string}
+                      branch_id: {type: string}
+                      next_cursor: {type: string, nullable: true}
+    post:
+      tags: [基础配置与排班]
+      operationId: staffCreateResource
+      summary: 新增资源
+      description: 负责人；禁止填写不存在的 asset_id。operating_state 由服务端默认「可用」。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branch_id, category_id, name, resource_type]
+              properties:
+                branch_id:
+                  type: string
+                category_id:
+                  type: string
+                name:
+                  type: string
+                  maxLength: 80
+                resource_type:
+                  $ref: '#/components/schemas/ResourceType'
+                asset_id:
+                  type: string
+                  description: 可选；须已存在且门店一致，虚拟资源可空
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceResult'
+
+  /staff/branches/{id}/booking-config:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffGetBookingConfig
+      summary: 读取签到窗口与步长
+      description: 负责人；未配置时返回 configured=false、version=1 及关闭的自助签到默认值。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: 当前配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchBookingConfigResult'
+    put:
+      tags: [基础配置与排班]
+      operationId: staffUpdateBookingConfig
+      summary: 设置签到窗口与步长
+      description: 负责人；未配置时自助签到关闭。启用自助签到必须填写 early/late 分钟。乐观锁：branch_booking_config.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [self_checkin_enabled, slot_step_minutes, expected_version]
+              properties:
+                self_checkin_enabled:
+                  type: boolean
+                early_minutes:
+                  type: integer
+                  minimum: 0
+                late_minutes:
+                  type: integer
+                  minimum: 0
+                slot_step_minutes:
+                  type: integer
+                  minimum: 1
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchBookingConfigResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /staff/branches/{id}/opening-intervals:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffGetOpeningIntervals
+      summary: 读取有界日期范围的营业区间
+      description: 负责人；同一角色 branch.configure + 本店 scope + 有效已核实任职。from_date/to_date 两端包含，最多31个连续自然日；按 valid_on/starts_at 稳定排序。响应中的 version 与 intervals 来自同一数据库快照。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - name: from_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 日期范围内的营业区间与聚合版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpeningIntervalResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    put:
+      tags: [基础配置与排班]
+      operationId: staffUpdateOpeningIntervals
+      summary: 按日期范围替换营业区间
+      description: |
+        负责人；from_date/to_date 两端包含，最多31个连续自然日。日期按 Asia/Shanghai；from_date 不得早于今天。
+        今天已开始的区间必须原样保留，只调整未开始区间；历史日期不可写。
+        空 intervals 表示范围内闭店；范围外记录不变。branch.version 是该集合的聚合版本。
+        缩短/删除导致未结束已发布班次或已确认/候诊中/接诊中预约失去完整覆盖时返回 409 影响摘要，零写入；待确认不占号、不参与覆盖校验；同值或扩大覆盖可成功。
+        历史校验和“今天已开始区间”保护在取得 branch 锁后按同一 now 执行；已成功请求的幂等重放只返回当前权威视图，不重新执行写入或历史检查。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpeningIntervalReplaceRequest'
+      responses:
+        '200':
+          description: 替换后的范围/版本/区间
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpeningIntervalResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 版本/历史/重叠冲突，或覆盖不足影响摘要
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OpeningCoverageError'
+                  - $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/accounts:
+    get:
+      tags: [身份与会话]
+      operationId: staffListAccounts
+      summary: 员工账号列表
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 账号分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountPage'
+    post:
+      tags: [身份与会话]
+      operationId: staffCreateAccount
+      summary: 新建员工账号
+      description: 系统管理员且已完成强制改密；目标须在岗且存在有效已核验 staff_branch 任职；创建待激活账号（无密码、不可登录），不自动授予角色。幂等键必填，同键同内容重放，同键不同内容或不同键重复 409。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [staff_id, login_name]
+              properties:
+                staff_id:
+                  type: string
+                login_name:
+                  type: string
+                  maxLength: 100
+      responses:
+        '201':
+          description: 已创建待激活账号
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffAccountCreated'
+        '200':
+          description: 同幂等键重放，返回原账号
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffAccountCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/accounts/{id}/role-scopes:
+    get:
+      tags: [身份与会话]
+      operationId: staffGetRoleScopes
+      summary: 读取员工账号角色与门店范围
+      description: 仅有效且已完成强制改密的账号管理员可读；患者账号或不可见账号按404处理；version为account.auth_version的并发令牌，不是登录凭证。单事务读取版本与角色，二者来自同一快照。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: 目标账号当前角色门店范围与并发版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffRoleScopes'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [身份与会话]
+      operationId: staffSetRoleScopes
+      summary: 设置角色与门店范围
+      description: 管理员禁止自提权；角色×门店分别限定，不拼接；全量替换，同值重复无副作用；服务端递增 auth_version 并撤销会话。expected_version必填且必须等于读取到的account.auth_version；不匹配409且不写角色/会话/审计。改密或停用也会递增auth_version，因此旧版本需要重新读取。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, roles]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 1
+                  description: 读取接口返回的 account.auth_version；不是登录凭证
+                roles:
+                  type: array
+                  maxItems: 7
+                  description: 禁止修改本人角色；空列表仅撤权；患者角色不可授予员工
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [role_code, branch_ids, approval_basis]
+                    properties:
+                      role_code:
+                        $ref: '#/components/schemas/RoleCode'
+                      branch_ids:
+                        type: array
+                        maxItems: 100
+                        uniqueItems: true
+                        description: sysadmin须为空；其他角色逐门店核验有效任职
+                        items:
+                          type: string
+                      approval_basis:
+                        type: string
+                        minLength: 1
+                        maxLength: 300
+      responses:
+        '200':
+          description: 已更新并撤销旧会话；返回权威当前版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffRoleScopesUpdated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /staff/accounts/{id}/disable:
+    post:
+      tags: [身份与会话]
+      operationId: staffDisableAccount
+      summary: 停用账号
+      description: 最后管理员保护，停用并撤销会话。状态置位，重复停用幂等返回，属幂等例外；服务端递增 auth_version。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已停用
+
+  # ============ 公开查询与患者预约 ============
+  /public/branches:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: publicListBranches
+      summary: 营业门店公开列表
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 公开门店分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBranchPage'
+
+  /public/branches/{id}:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: publicGetBranch
+      summary: 门店公开详情
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: 地址、电话、营业说明及当前公开规则
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicBranch'
+
+  /public/doctors:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: publicListDoctors
+      summary: 公开医生列表
+      security: []
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: item_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 经核验公开医生分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDoctorPage'
+
+  /public/doctors/{id}:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: publicGetDoctor
+      summary: 公开医生名片
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/DoctorPathId'
+      responses:
+        '200':
+          description: 公开名片及出诊门店（不含分享者信息）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicDoctor'
+
+  /public/slots:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: publicGetSlots
+      summary: 可约时段查询
+      description: 一次最多31日，按上海日期筛选起始时段；仅返回已核验营业门店、已发布排班和患者可自助预约项目的当前候选，含起止、schedule_id、医生及当前 policy_id。候选不预占号源，提交时仍须重新校验；有效且未解除的资源禁用自 starts_at 起阻止候选，预计 ends_at 不自动解除。
+      security: []
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: item_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dentist_id
+          in: query
+          schema:
+            type: string
+        - name: visit_type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/VisitType'
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 可约时段列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotPage'
+
+  /me/doctor-preferences:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: meListDoctorPreferences
+      summary: 本人收藏列表
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 收藏分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorPreferencePage'
+
+  /me/doctor-preferences/{doctor_id}:
+    put:
+      tags: [公开查询与患者预约]
+      operationId: meSetDoctorPreference
+      summary: 收藏医生
+      description: set 型 PUT，重复收藏同值无副作用，属幂等例外。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source]
+              properties:
+                source:
+                  $ref: '#/components/schemas/DoctorPreferenceSource'
+      responses:
+        '200':
+          description: 已收藏
+    delete:
+      tags: [公开查询与患者预约]
+      operationId: meDeleteDoctorPreference
+      summary: 取消收藏
+      description: 删除型，重复删除幂等，属幂等例外。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+      responses:
+        '204':
+          description: 已取消
+
+  /me/followup-plans:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: meListFollowupPlans
+      summary: 本人复诊建议（只读）
+      description: 本人已核实建议，只读，不自动生成治疗建议。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 复诊计划分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowupPlanPage'
+
+  /me/appointments:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: meListAppointments
+      summary: 本人预约列表
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - name: state
+          in: query
+          schema:
+            $ref: '#/components/schemas/AppointmentState'
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 本人预约分页（含 coordination_state）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentPage'
+    post:
+      tags: [公开查询与患者预约]
+      operationId: meCreateAppointment
+      summary: 本人预约
+      description: |
+        当前实现创建已确认预约；本阶段单一 item_id，时段由服务端排班、营业区间、资格和资源规则最终校验。
+        服务端拒绝已开始时段；不接收 ends_at/confirmed_dentist_id/state/resource_ids/policy_id。
+        followup_plan_id 可选；提供时必须是本人待协调计划、复诊类型、原主治排班且预约时长满足计划。计划指定 service_item_id 时，预约项目也必须一致。
+        取消后计划回到待协调；改约保留计划关联，不能自行改为其他医生或缩短计划时长。
+        幂等键必填，同键重放仍核验当前身份及本人可见性。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schedule_id, item_id, starts_at]
+              properties:
+                schedule_id:
+                  type: integer
+                  minimum: 1
+                item_id:
+                  type: integer
+                  minimum: 1
+                starts_at:
+                  type: string
+                  format: date-time
+                visit_type:
+                  $ref: '#/components/schemas/VisitType'
+                followup_plan_id:
+                  type: integer
+                  minimum: 1
+                purpose:
+                  type: string
+                  maxLength: 200
+      responses:
+        '201':
+          description: 已确认预约；返回本人可见的 followup_plan_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /me/appointments/{id}:
+    get:
+      tags: [公开查询与患者预约]
+      operationId: meGetAppointment
+      summary: 本人预约详情
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200':
+          description: 凭证、取消规则、确认医生、本人可见协调结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResult'
+
+  /me/appointments/{id}/cancel:
+    post:
+      tags: [公开查询与患者预约]
+      operationId: meCancelAppointment
+      summary: 本人取消
+      description: 释放占用并退出候诊；开始接诊后拒绝。乐观锁：appointment.version 用 expected_version 校验。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, expected_version]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已取消
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /me/appointments/{id}/reschedule:
+    post:
+      tags: [公开查询与患者预约]
+      operationId: meRescheduleAppointment
+      summary: 本人改约
+      description: 保留原单并创建 previous_id 关联的新单，失败整体回滚。版本检查只执行首次业务操作；同键重放返回同一查询快照下的当前新旧单，不重复创建。当前政策版本校验尚待实现，见 appointment-contract-gap.md。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schedule_id, item_id, starts_at, expected_version, reason]
+              properties:
+                schedule_id:
+                  type: string
+                item_id:
+                  type: string
+                starts_at:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 300
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 旧单与新单
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [original, replacement]
+                    properties:
+                      original:
+                        $ref: '#/components/schemas/PatientAppointmentView'
+                      replacement:
+                        $ref: '#/components/schemas/PatientAppointmentView'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /me/changes:
+    get:
+      tags: [协调]
+      operationId: meListChanges
+      summary: 查看本人的协调方案
+      description: 最近100条；候选待确认不占号，已同意仍需前台落实。
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200':
+          description: 本人方案列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeListResult'
+
+  /me/changes/{id}/response:
+    post:
+      tags: [协调]
+      operationId: meRespondToChange
+      summary: 患者答复改约方案
+      description: 接受不等于号源已落实，另返回落实结果/待协调。乐观锁：appointment_change.version 用 expected_version 校验。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/ChangeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [accept, expected_version]
+              properties:
+                accept:
+                  type: boolean
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 答复结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeResponseResult'
+
+  /me/appointments/{id}/checkin:
+    post:
+      tags: [签到]
+      operationId: meCheckin
+      summary: 本人扫码签到
+      description: 同一 queue_ticket 和号码；重复返回原号。乐观锁 + 幂等键。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branch_checkin_token, expected_version]
+              properties:
+                branch_checkin_token:
+                  type: string
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 候诊凭证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTicketResult'
+
+  /me/restrictions:
+    get:
+      tags: [政策]
+      operationId: meListRestrictions
+      summary: 本人限制
+      description: 本人限制、依据、到期和申诉途径。
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200':
+          description: 限制列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestrictionPage'
+
+  /me/restrictions/{id}/appeal:
+    post:
+      tags: [政策]
+      operationId: meAppealRestriction
+      summary: 申诉限制
+      description: 建联系待办及审计，不自动撤销或重复创建同次申诉。幂等键必填（防重复创建申诉）。
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - $ref: '#/components/parameters/RestrictionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已登记申诉
+
+  # ============ 员工工作台 ============
+  /staff/schedules:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffListSchedules
+      summary: 排班列表
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - name: dentist_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 排班分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulePage'
+    post:
+      tags: [基础配置与排班]
+      operationId: staffCreateSchedule
+      summary: 新增排班（草稿）
+      description: 负责人操作；草稿可带 expected_version 修改（另见修改通道说明）。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+      responses:
+        '201':
+          description: 草稿
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResult'
+
+  /staff/schedules/{id}/publish:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffPublishSchedule
+      summary: 发布排班
+      description: 校验资格、营业、任职和资源后发布。乐观锁：schedule.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/ScheduleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已发布
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /staff/schedules/{id}/suspend:
+    post:
+      tags: [基础配置与排班]
+      operationId: staffSuspendSchedule
+      summary: 暂停排班
+      description: 关闭新增并列受影响预约；不自动替诊。乐观锁：schedule.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/ScheduleId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, expected_version]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已暂停
+
+  /staff/dentist-unavailability:
+    get:
+      tags: [协调]
+      operationId: staffListDentistUnavailability
+      summary: 医生停诊记录与受影响预约摘要
+      description: 仅唯一组织负责人。返回停诊记录及当前仍受影响的预约摘要；摘要只含预约编号、时间、门店、项目和协调状态，不含患者姓名或联系方式。不自动取消、不释放占用、不表示已通知。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UnavailabilityState'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 停诊记录列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistUnavailabilityPage'
+    post:
+      tags: [协调]
+      operationId: staffCreateDentistUnavailability
+      summary: 登记医生停诊
+      description: 仅唯一组织负责人登记全局牙医停诊；事务提交后相交时段的新预约立即不可用。既有预约不自动取消、不释放占用、不视为已联系；逐患者协调另走正式流程。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [doctor_id, starts_at, ends_at, reason]
+              properties:
+                doctor_id:
+                  type: string
+                starts_at:
+                  type: string
+                  format: date-time
+                ends_at:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        '201':
+          description: 已登记停诊
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, request_id]
+                properties:
+                  data:
+                    type: object
+                    required: [absence_id, doctor_id, starts_at, ends_at, state]
+                    properties:
+                      absence_id: {type: string}
+                      doctor_id: {type: string}
+                      starts_at: {type: string, format: date-time}
+                      ends_at: {type: string, format: date-time}
+                      state: {type: string, enum: [有效, 已撤销]}
+                  request_id: {type: string}
+
+  /staff/dentist-unavailability/{id}/resolve:
+    post:
+      tags: [协调]
+      operationId: staffResolveDentistUnavailability
+      summary: 人工解除医生停诊
+      description: |
+        仅唯一组织负责人。仅有效记录可解除；人工核实后写入 resolved_at/resolved_by（取当前会话）/resolve_basis。
+        解除只更新停诊记录，不自动取消预约、不释放占用、不发送通知。幂等键必填；重复解除返回 409。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/UnavailableId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [resolve_basis]
+              properties:
+                resolve_basis:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已解除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistUnavailabilityResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /staff/resource-unavailability:
+    get:
+      tags: [协调]
+      operationId: staffListResourceUnavailability
+      summary: 资源禁用记录与受影响预约摘要
+      description: 目标门店 branch.configure 且任职已核验；仅返回该门店记录。摘要只含预约编号、时间、门店、项目和协调状态，不含患者姓名或联系方式。不自动取消、不释放占用、不表示已通知。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchIdQuery'
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UnavailabilityState'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 资源禁用记录列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceUnavailabilityPage'
+    post:
+      tags: [协调]
+      operationId: staffCreateResourceUnavailability
+      summary: 登记资源禁用
+      description: 本店 branch.configure 负责人且任职已核验；kind=维护/故障。有效禁用自 starts_at 起持续阻止该资源新占用，预计 ends_at 不作为自动恢复依据。既有预约不自动取消或通知。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [resource_id, kind, starts_at, ends_at, reason]
+              properties:
+                resource_id:
+                  type: string
+                kind:
+                  $ref: '#/components/schemas/ResourceKind'
+                starts_at:
+                  type: string
+                  format: date-time
+                ends_at:
+                  type: string
+                  format: date-time
+                  description: 预计结束，不代表自动恢复
+                reason:
+                  type: string
+                  maxLength: 200
+      responses:
+        '201':
+          description: 已登记禁用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceUnavailabilityResult'
+
+  /staff/resource-unavailability/{id}/resolve:
+    post:
+      tags: [协调]
+      operationId: staffResolveResourceUnavailability
+      summary: 人工解除资源禁用
+      description: |
+        负责人；resolve_type=误登记撤销/已修复。人工核实后成组记录 resolved_by（取当前会话，不接受客户端传入，不得覆盖原登记人）/resolved_at/resolve_type/resolve_basis。
+        解除本条后仍校验其他有效禁用记录，不因预计结束时间已过自动恢复。
+        resource_unavailable 无 version 列，用「幂等键 + 状态前置（仅有效可解除）」保证。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/UnavailableId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [resolve_type, resolve_basis]
+              properties:
+                resolve_type:
+                  $ref: '#/components/schemas/ResolveType'
+                resolve_basis:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已解除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceUnavailabilityResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /staff/appointments:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffListAppointments
+      description: 当前实现按服务端授权范围返回列表；尚未实现分页和 branch_id 筛选。
+      summary: 本店预约列表
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - {name: date, in: query, schema: {type: string, format: date}}
+      responses:
+        '200': {description: 预约列表, content: {application/json: {schema: {type: object}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [基础配置与排班]
+      operationId: staffCreateAppointment
+      description: 当前运行接口；请求幂等必填，同键同内容返回当前预约，不重复创建；患者确认依据必填并留存。活动占用仅含已确认/候诊中/接诊中，待确认不占医生、患者或牙椅号源。
+      summary: 前台代约（锁排班并检查冲突）
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [patient_id, patient_selection_token, schedule_id, item_id, starts_at, consent_basis]
+              properties:
+                patient_id: {type: string}
+                patient_selection_token: {type: string, description: 本店受控选择/建档签发的短时凭证}
+                schedule_id: {type: string}
+                item_id: {type: string}
+                starts_at: {type: string, format: date-time}
+                visit_type: {type: string, nullable: true}
+                channel: {type: string, nullable: true}
+                consent_basis: {type: string, minLength: 1, maxLength: 300}
+                purpose: {type: string, nullable: true}
+      responses:
+        '201': {description: 已创建}
+        '409': {description: 时段冲突}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/patients:
+    get:
+      tags: [协调]
+      operationId: staffSearchPatients
+      summary: 前台精确检索患者候选
+      description: 单一机构内按精确姓名+规范化电话返回最小候选；姓名电话只用于找候选，不代表已核实本人。需要 patients.lookup 与本店有效任职。
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - {name: branch_id, in: query, required: true, schema: {type: string}}
+        - {name: name, in: query, required: true, schema: {type: string, maxLength: 60}}
+        - {name: phone, in: query, required: true, schema: {type: string, maxLength: 30}}
+      responses:
+        '200':
+          description: 最小候选；最多10条
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [branch_id, matches, requires_manual_verification, verification_required, can_create]
+                    properties:
+                      branch_id: {type: string}
+                      matches:
+                        type: array
+                        items: {$ref: '#/components/schemas/PatientMatch'}
+                      requires_manual_verification: {type: boolean}
+                      verification_required: {type: boolean}
+                      can_create: {type: boolean}
+                      reason: {type: string, nullable: true}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {description: 检索频率超限}
+    post:
+      tags: [协调]
+      operationId: staffCreatePatient
+      summary: 前台建立 patient-only 档案
+      description: 需要 patients.create；不创建账号/微信；首次返回选择凭证，同键重放不重显明文。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCreatePatientRequest'
+      responses:
+        '201':
+          description: 已建档；首次含 selection_token，重放型不含
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/PatientReceptionCreateResult'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: 精确档案已存在或需人工核验}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/patients/{id}/summary:
+    get:
+      tags: [协调]
+      operationId: staffPatientSummary
+      summary: 本店用户档案摘要
+      description: 需要 patients.lookup 和有效门店任职；用户须已有本店预约，或当前操作者持有该用户本店未过期的选择记录。上次接诊医师仅取本店已完成就诊，不推断历史来源。
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: branch_id, in: query, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: 最小档案摘要
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [patient_id, name, birth_date, allergy_status, source_channel, last_visit_dentist, last_visit_at]
+                    properties:
+                      patient_id: {type: string}
+                      name: {type: string}
+                      birth_date: {type: string, format: date, nullable: true}
+                      allergy_status: {type: string}
+                      source_channel: {type: string, enum: [现场, 电话, 转介绍, 微信小程序, 其他], nullable: true}
+                      last_visit_dentist: {type: string, nullable: true}
+                      last_visit_at: {type: string, format: date-time, nullable: true}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: 用户不存在或无本店业务关联}
+
+  /staff/patients/{id}/reception-summary:
+    get:
+      tags: [协调]
+      operationId: staffPatientReceptionSummary
+      summary: 前台本店接待资料
+      description: 需要 patients.lookup 和本店有效任职，且用户已有本店预约。只返回联系方式、本店预约与已完成就诊的时间、项目和医生；不返回诊断及诊疗笔记。逐人读取并记录审计。
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: branch_id, in: query, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: 本店接待资料
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [patient_id, name, phone, appointments, visits]
+                    properties:
+                      patient_id: {type: string}
+                      name: {type: string}
+                      phone: {type: string}
+                      appointments: {type: array, items: {type: object}}
+                      visits: {type: array, items: {type: object}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: 用户不存在或无本店预约}
+
+  /staff/patients/{id}/selection:
+    post:
+      tags: [协调]
+      operationId: staffSelectPatient
+      summary: 线下核验后签发患者选择凭证
+      description: 需要 patients.lookup；姓名+电话只用于重新定位，必须提交实际线下核验方式和 confirmed 结果；token 只返回一次。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientSelectionRequest'
+      responses:
+        '200':
+          description: 选择凭证，仅此次显示
+          headers:
+            Cache-Control: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/PatientSelectionResult'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/appointments/{id}/confirm:
+    post:
+      tags: [协调]
+      operationId: staffConfirmAppointment
+      summary: 落实待确认预约
+      description: 待确认转已确认，同一确认服务；consent_basis 必填。乐观锁：appointment.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schedule_id, item_id, starts_at, policy_id, consent_basis, expected_version]
+              properties:
+                schedule_id:
+                  type: string
+                item_id:
+                  type: string
+                starts_at:
+                  type: string
+                  format: date-time
+                policy_id:
+                  type: string
+                consent_basis:
+                  type: string
+                  maxLength: 300
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已确认
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResult'
+
+  /staff/appointments/{id}/cancel:
+    post:
+      tags: [协调]
+      operationId: staffCancelAppointment
+      summary: 前台取消
+      description: 前台核实发起方；诊所原因不计处罚。乐观锁：appointment.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, initiated_by, expected_version]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+                initiated_by:
+                  type: string
+                  description: 发起方标识（patient/clinic/system）
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已取消
+
+  /staff/appointments/{id}/changes:
+    post:
+      tags: [协调]
+      operationId: staffCreateChangeProposal
+      summary: 前台拟改约方案
+      description: 候选待确认不占号；候选 previous_id 指向原预约。幂等键必填（防重复拟方案）。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [candidate, reason]
+              properties:
+                candidate:
+                  type: object
+                  additionalProperties: false
+                  required: [schedule_id, item_id, starts_at, policy_id]
+                  properties:
+                    schedule_id:
+                      type: string
+                    item_id:
+                      type: string
+                    starts_at:
+                      type: string
+                      format: date-time
+                    policy_id:
+                      type: string
+                reason:
+                  type: string
+                  maxLength: 300
+                absence_id:
+                  type: string
+                unavailable_id:
+                  type: string
+      responses:
+        '201':
+          description: 方案已拟
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeProposalResult'
+
+  /staff/changes:
+    get:
+      tags: [协调]
+      operationId: staffListChanges
+      summary: 查看本店协调方案
+      description: 需本店代约权限及已核实任职；最近100条。
+      security:
+        - {StaffSessionCookie: []}
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema: {type: integer, format: int64, minimum: 1}
+      responses:
+        '200':
+          description: 本店方案列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeListResult'
+
+  /staff/changes/{id}/response:
+    post:
+      tags: [协调]
+      operationId: staffRespondToChange
+      summary: 前台登记患者答复
+      description: 登记真实电话等答复，不默认同意。乐观锁：appointment_change.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/ChangeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [accept, confirmation_basis, expected_version]
+              properties:
+                accept:
+                  type: boolean
+                confirmation_basis:
+                  type: string
+                  maxLength: 300
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已登记答复
+
+  /staff/changes/{id}/apply:
+    post:
+      tags: [协调]
+      operationId: staffApplyChange
+      summary: 落实改约方案
+      description: 已同意才落实，冲突 409 并保留协调事实。乐观锁：appointment_change.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/ChangeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已落实
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /staff/changes/{id}/withdraw:
+    post:
+      tags: [协调]
+      operationId: staffWithdrawChange
+      summary: 撤回未落实的协调方案
+      description: 仅待答复或已同意的方案可撤回。撤回取消未占号的候选预约，保留原预约与已登记的患者答复；若患者已同意，前台须另行告知。用 expected_version 检查并发，同键重放返回当前权威视图。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/ChangeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, reason]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 1
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已撤回，返回当前方案视图
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /staff/contacts:
+    get:
+      tags: [协调]
+      operationId: staffListContacts
+      summary: 人工联系历史列表
+      description: 当前实现只返回当前授权门店的预约人工联系记录，按 contact_id 降序游标分页；尚无自动通知派发。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 联系待办分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactPage'
+    post:
+      tags: [协调]
+      operationId: staffCreateContact
+      summary: 登记联系记录
+      description: 当前仅登记受有效停诊/资源禁用影响的预约人工联系尝试；只接受 kind=人工联系及电话/微信登记/当面渠道。未提供 acknowledgment_basis 时不表示患者知晓。幂等键必填；不自动改约、取消或发送系统通知。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactRequest'
+      responses:
+        '201':
+          description: 已登记
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, request_id]
+                properties:
+                  data: {$ref: '#/components/schemas/ManualContact'}
+                  request_id: {type: string}
+
+  /staff/contacts/due:
+    get:
+      tags: [协调]
+      operationId: staffListDueContacts
+      summary: 受影响预约待联系清单
+      description: 当前门店未来仍受有效停诊或资源禁用影响的活动预约；未联系、未确认知晓且未安排下次联系、或下次联系已到期时列出。只返回预约编号与时间、最近人工联系摘要；不表示系统通知已送达。按预约编号升序游标分页。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema: {type: integer, minimum: 1}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 待联系事项分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactTodoPage'
+
+  /staff/branches/{id}/checkin-code:
+    post:
+      tags: [签到]
+      operationId: staffCreateCheckinCode
+      summary: 生成门店签到码
+      description: 前台在本店营业且自助签到已启用时生成60秒有效的门店签名码，不含患者资料。同一幂等键重放返回原码；过期后须使用新键重新生成。生产环境未配置独立签名密钥时拒绝发码。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 签到码
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [code, expires_at]
+                    properties:
+                      code:
+                        type: string
+                      expires_at:
+                        type: string
+                        format: date-time
+
+  /staff/appointments/{id}/checkin:
+    post:
+      tags: [签到]
+      operationId: staffCheckin
+      summary: 前台签到
+      description: 前台核实，异常时间须理由；取消、已改约、停诊不可直接强签。乐观锁：appointment.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, verification_basis]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 1
+                verification_basis:
+                  type: string
+                  maxLength: 300
+                exception_reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 候诊凭证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTicketResult'
+
+  /staff/queue:
+    get:
+      tags: [签到]
+      operationId: staffGetQueue
+      summary: 候诊队列
+      description: 前台或本人牙医可见的候诊最小资料。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 候诊列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueTicket'
+
+  /staff/appointments/{id}/no-show-review:
+    post:
+      tags: [政策]
+      operationId: staffNoShowReview
+      summary: 核实未到
+      description: 结束且未签到才可核实未到。乐观锁：appointment.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, expected_version]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已核实
+
+  /staff/booking-events/{id}/review:
+    post:
+      tags: [政策]
+      operationId: staffReviewBookingEvent
+      summary: 复核履约事件
+      description: 前台本店复核，重算限制并审计。booking_event 无 version 列，用「幂等键 + 状态前置（仅待核实可复核）」保证。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [counted, reason]
+              properties:
+                counted:
+                  type: boolean
+                reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        '200':
+          description: 已复核
+
+  /staff/restrictions:
+    get:
+      tags: [政策]
+      operationId: staffListRestrictions
+      summary: 限制列表（员工视角）
+      description: 前台处理申诉，不显示其他门店记录。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 限制分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestrictionPage'
+
+  /staff/booking-policies:
+    post:
+      tags: [政策]
+      operationId: staffCreateBookingPolicy
+      summary: 新建政策草稿
+      description: 负责人草稿，默认不启用限制。幂等键必填。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingPolicyRequest'
+      responses:
+        '201':
+          description: 草稿
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingPolicyResult'
+
+  /staff/booking-policies/{id}/publish:
+    post:
+      tags: [政策]
+      operationId: staffPublishBookingPolicy
+      summary: 批准发布政策
+      description: 负责人批准，版本不可原地加重；approval_basis/effective_at 必填，approved_by/approved_at 由服务端记录。乐观锁：booking_policy.version 用 expected_version 校验。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [approval_basis, effective_at, expected_version]
+              properties:
+                approval_basis:
+                  type: string
+                  maxLength: 300
+                effective_at:
+                  type: string
+                  format: date-time
+                expected_version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: 已发布
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingPolicyResult'
+
+
+  # ============ 现有真实业务扩展 ============
+  /staff/internal-messages/contacts:
+    get:
+      tags: [店内沟通]
+      operationId: staffInternalMessageContacts
+      summary: 当前前台或医生可沟通的本店员工
+      description: 仅返回同门店、有效任职和相应角色授权的已激活账号。owner 与 sysadmin 不自动获得消息权限。
+      security: [{StaffSessionCookie: []}]
+      responses:
+        '200':
+          description: 联系人列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/InternalContact'}
+  /staff/internal-messages:
+    get:
+      tags: [店内沟通]
+      operationId: staffInternalMessageList
+      summary: 读取本店与指定员工的历史消息
+      description: 服务端核验双方的门店角色与任职；仅返回指定会话，按消息编号分页。
+      security: [{StaffSessionCookie: []}]
+      parameters:
+        - {name: branch_id, in: query, required: true, schema: {type: integer, minimum: 1}}
+        - {name: peer_staff_id, in: query, required: true, schema: {type: integer, minimum: 1}}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 按时间正序显示的一页消息；cursor 用于读取更早消息
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InternalMessagePage'}
+    post:
+      tags: [店内沟通]
+      operationId: staffInternalMessageSend
+      summary: 向本店前台或医生发送一条不可修改的工作消息
+      description: 消息不触发改约、替诊、停诊、诊疗、收费等业务状态变更；网络结果不明时须用相同 Idempotency-Key 手动重试。
+      security: [{StaffSessionCookie: [], StaffCsrf: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branch_id, peer_staff_id, body]
+              properties:
+                branch_id: {type: integer, minimum: 1}
+                peer_staff_id: {type: integer, minimum: 1}
+                body: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '201':
+          description: 已保存消息，重放仍返回原消息
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/InternalMessage'}
+  /staff/booking:
+    get:
+      tags: [基础配置与排班]
+      operationId: staffBookingOverview
+      summary: 前台预约工作台数据
+      security:
+        - {StaffSessionCookie: []}
+      responses:
+        '200':
+          description: 门店、患者计数、牙医及助手排班、项目、已发布政策、availability 与预约。联系方式须逐人读取接待资料接口。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, request_id]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      branches: {type: array, items: {type: object}}
+                      patients:
+                        type: array
+                        description: 兼容旧客户端的空数组，不批量返回患者信息。
+                        items: {type: object}
+                      patient_count: {type: integer, minimum: 0}
+                      schedules: {type: array, items: {type: object}}
+                      assistant_shifts:
+                        type: array
+                        description: 仅授权门店未来的诊疗助手班次；不产生牙医号源或预约资格。
+                        items:
+                          type: object
+                          required: [shift_id, branch_id, staff_id, name, job_title, starts_at, ends_at]
+                          properties:
+                            shift_id: {type: string}
+                            branch_id: {type: string}
+                            staff_id: {type: string}
+                            name: {type: string}
+                            job_title: {type: string}
+                            starts_at: {type: string, format: date-time}
+                            ends_at: {type: string, format: date-time}
+                      services: {type: array, items: {type: object}}
+                      policies:
+                        type: array
+                        description: 当前授权门店的已发布政策编号；供候选方案提交时核对，服务端仍重新验证。
+                        items:
+                          type: object
+                          required: [policy_id, branch_id]
+                          properties:
+                            policy_id: {type: string}
+                            branch_id: {type: string}
+                      availability:
+                        type: array
+                        items: {$ref: '#/components/schemas/BookingAvailabilityItem'}
+                      appointments:
+                        type: array
+                        items: {$ref: '#/components/schemas/BookingAppointment'}
+                  request_id: {type: string}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+
+  /staff/visits:
+    post:
+      tags: [临床与治疗]
+      operationId: staffVisitComplete
+      summary: 完成就诊（需要 clinical.record，仅牙医角色默认获得）
+      description: 关联复诊计划时，接诊医生必须提交 followup_goal_achieved 和非空临床记录；目标达到则计划完成，未达到则继续待协调。预约完成本身不能自动判定复诊目标。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [appointment_id, allergy_result]
+              properties:
+                appointment_id: {type: string}
+                allergy_result: {type: string, enum: [无已知, 有, 不确定]}
+                allergy_snapshot: {type: string}
+                clinical_notes: {type: string}
+                followup_goal_achieved:
+                  type: boolean
+                  description: 仅关联复诊计划的预约必填；须由实际接诊医生按临床记录确认
+      responses:
+        '201': {description: 已写就诊记录}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: 状态冲突}
+
+  /staff/treatment-plans:
+    get:
+      tags: [临床与治疗]
+      operationId: staffTreatmentPlanOverview
+      summary: 治疗计划列表（需要 clinical.plan）
+      security:
+        - {StaffSessionCookie: []}
+      responses:
+        '200': {description: 计划列表}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [临床与治疗]
+      operationId: staffTreatmentPlanCreate
+      summary: 创建治疗计划草稿
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source_visit_id, title, items]
+              properties:
+                source_visit_id: {type: string}
+                title: {type: string}
+                diagnosis: {type: string}
+                items:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [name, quantity, unit_price_cents]
+                    properties:
+                      service_item_id: {type: integer}
+                      name: {type: string}
+                      tooth_position: {type: string}
+                      phase: {type: string}
+                      quantity: {type: integer}
+                      unit_price_cents: {type: integer}
+      responses:
+        '201': {description: 草稿}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  /staff/treatment-plans/{id}/bill:
+    post:
+      tags: [收费与票据]
+      operationId: staffTreatmentPlanBill
+      summary: 从已接受治疗计划生成账单（一个计划最多一张）
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '201': {description: 账单已创建}
+        '409': {description: 重复建账或状态冲突}
+
+  /staff/billing:
+    get:
+      tags: [收费与票据]
+      operationId: staffBillingOverview
+      summary: 收费工作台（需要 billing.manage）
+      security:
+        - {StaffSessionCookie: []}
+      responses:
+        '200': {description: 账单、收款、退款处理状态与票据}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  /staff/invoices:
+    post:
+      tags: [收费与票据]
+      operationId: staffInvoiceCreate
+      summary: 票据申请（人工收据或人工登记的正式票据）
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [bill_id, title]
+              properties:
+                bill_id: {type: string}
+                title: {type: string}
+                invoice_type: {type: string, enum: [人工收据, 增值税普通发票, 增值税专用发票]}
+                buyer_type: {type: string, enum: [个人, 单位]}
+                buyer_tax_no: {type: string}
+                tax_treatment: {type: string, enum: [应税, 免税, 零税率, 不征税]}
+                tax_rate_bps: {type: integer}
+                net_amount_cents: {type: integer}
+                tax_amount_cents: {type: integer}
+      responses:
+        '201': {description: 待开票申请}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/invoices/{id}/red:
+    post:
+      tags: [收费与票据]
+      operationId: staffInvoiceRedRequest
+      summary: 创建红冲申请；原票此时不变，完成红冲登记后才置已红冲
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '201': {description: 红冲申请待开票}
+        '409': {description: 已有活动红冲或原票状态不允许}
+
+  /staff/invoices/{id}/issue:
+    post:
+      tags: [收费与票据]
+      operationId: staffInvoiceIssue
+      summary: 登记票据号；红冲票必须同时登记完成依据
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [invoice_no]
+              properties:
+                invoice_no: {type: string}
+                basis: {type: string, description: 红冲完成依据，红冲票必填}
+      responses:
+        '200': {description: 已登记}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /me/records:
+    get:
+      tags: [患者自助]
+      operationId: patientRecords
+      summary: 本人就诊与复诊记录
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200': {description: 记录}
+
+  /me/treatment-plans:
+    get:
+      tags: [患者自助]
+      operationId: patientTreatmentPlans
+      summary: 本人治疗计划
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200': {description: 计划}
+
+  /me/treatment-plans/{id}/accept:
+    post:
+      tags: [患者自助]
+      operationId: patientTreatmentPlanAccept
+      summary: 患者接受治疗计划并记录依据
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                basis: {type: string}
+      responses:
+        '200': {description: 已接受}
+        '404': {description: 非本人计划}
+
+
+  /staff/clinical:
+    get:
+      tags: [临床与治疗]
+      operationId: staffClinicalOverview
+      summary: 就诊与复诊工作台
+      description: 候诊和接诊中的 appointments 仅包含当前登录医生作为确认医生的预约；历史就诊与复诊计划仍按授权门店读取。plan_source_visits 只列当前医生本人完成的就诊，可用于创建复诊计划。开始及完成接诊另行校验实际医生身份。
+      security:
+        - {StaffSessionCookie: []}
+      responses:
+        '200': {description: 临床工作台}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  /staff/followup-plans:
+    get:
+      tags: [临床与治疗]
+      operationId: staffFollowupPlanList
+      summary: 复诊计划
+      security:
+        - {StaffSessionCookie: []}
+      responses:
+        '200': {description: 复诊计划列表}
+    post:
+      tags: [临床与治疗]
+      operationId: staffFollowupPlanCreate
+      summary: 创建复诊计划
+      description: 仅源就诊的实际接诊牙医本人可制定；可选指定该医生当前启用的可预约服务项目。未指定时允许后续从符合排班和时长的项目中选择。同次就诊已有待协调或已预约计划时返回 409 FOLLOWUP_PLAN_ALREADY_ACTIVE。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [visit_id, suggested_from, suggested_to, duration_minutes, purpose]
+              properties:
+                visit_id: {type: string}
+                suggested_from: {type: string, format: date}
+                suggested_to: {type: string, format: date}
+                duration_minutes: {type: integer}
+                purpose: {type: string}
+                service_item_id: {type: integer, format: int64, nullable: true, minimum: 1}
+      responses:
+        '201': {description: 已创建}
+        '403': {description: 非源就诊实际接诊牙医或无门店临床权限}
+        '409': {description: 源就诊已有待协调或已预约复诊计划}
+
+  /staff/treatment-plans/{id}/submit:
+    post:
+      tags: [临床与治疗]
+      operationId: staffTreatmentPlanSubmit
+      summary: 提交患者确认
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 待患者确认}
+        '409': {description: 状态冲突}
+
+  /staff/treatment-plans/{id}/items/{itemId}/status:
+    post:
+      tags: [临床与治疗]
+      operationId: staffTreatmentPlanItemStatus
+      summary: 更新治疗项目进度
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: itemId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: {type: string, enum: [计划, 进行中, 已完成, 已取消]}
+      responses:
+        '200': {description: 已更新}
+        '409': {description: 计划未接受}
+
+  /staff/bills:
+    post:
+      tags: [收费与票据]
+      operationId: staffBillCreate
+      summary: 从已完成就诊创建账单
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [visit_id, items]
+              properties:
+                visit_id: {type: string}
+                items:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [name, quantity, unit_price_cents]
+                    properties:
+                      name: {type: string}
+                      quantity: {type: integer}
+                      unit_price_cents: {type: integer}
+      responses:
+        '201': {description: 账单}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/bills/{id}/payments:
+    post:
+      tags: [收费与票据]
+      operationId: staffBillPayment
+      summary: 登记线下收款
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 64}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amount_cents, method]
+              properties:
+                amount_cents: {type: integer, minimum: 1}
+                method: {type: string, enum: [现金, 银行卡, 微信线下登记, 其他线下]}
+                note: {type: string}
+      responses:
+        '200': {description: 已登记收款}
+        '409': {description: 账单已结清}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/refunds:
+    post:
+      tags: [收费与票据]
+      operationId: staffRefundRequest
+      summary: 提交退款申请（仅申请，不代表退款完成）
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [bill_id, amount_cents, reason]
+              properties:
+                bill_id: {type: string}
+                payment_id: {type: integer}
+                amount_cents: {type: integer}
+                reason: {type: string}
+      responses:
+        '201': {description: 待处理申请}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/refunds/{id}/process:
+    post:
+      tags: [收费与票据]
+      operationId: staffRefundProcess
+      summary: 财务登记线下退款完成或拒绝；需 billing.refund_process 权限
+      description: 已退款必须以线下实际退款凭证为依据；本操作不调用支付渠道。处理后不可重复处理，发票更正独立办理。
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision, basis]
+              properties:
+                decision: {type: string, enum: [已退款, 已拒绝]}
+                basis: {type: string, minLength: 1, maxLength: 300}
+      responses:
+        '200': {description: 处理结果已登记}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: 申请已经处理}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /staff/invoices/{id}/void:
+    post:
+      tags: [收费与票据]
+      operationId: staffInvoiceVoid
+      summary: 作废票据；活动红冲时拒绝
+      security:
+        - {StaffSessionCookie: [], StaffCsrf: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: {type: string}
+      responses:
+        '200': {description: 已作废}
+        '409': {description: 有活动红冲或已红冲}
+
+  /me/billing:
+    get:
+      tags: [患者自助]
+      operationId: patientBilling
+      summary: 本人账单、收款、退款与票据
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200': {description: 收费记录}
+
+  /me/treatment-plans/{id}/reject:
+    post:
+      tags: [患者自助]
+      operationId: patientTreatmentPlanReject
+      summary: 患者拒绝治疗计划
+      security:
+        - {PatientBearer: []}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 已拒绝}
+        '404': {description: 非本人计划}
+
+
+  /me/booking:
+    get:
+      tags: [患者自助]
+      operationId: patientBookingOverview
+      summary: 患者真实可约数据
+      description: 返回已发布排班、服务项目、本人预约和后端生成的 availability 候选时段。候选不代表预占，提交时服务端重新校验。
+      security:
+        - {PatientBearer: []}
+      responses:
+        '200':
+          description: 排班、服务、availability、本人预约
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedules: {type: array, items: {type: object}}
+                  services: {type: array, items: {type: object}}
+                  availability:
+                    type: array
+                    items: {$ref: '#/components/schemas/BookingAvailabilityItem'}
+                  appointments:
+                    type: array
+                    items: {$ref: '#/components/schemas/BookingAppointment'}
+        '401': {description: 未登录}
+
+components:
+  securitySchemes:
+    PatientBearer:
+      type: http
+      scheme: bearer
+      description: 服务端签发的不透明 Bearer，数据库仅存摘要；小程序端。
+    StaffSessionCookie:
+      type: apiKey
+      in: cookie
+      name: A_CLINIC_SESSION
+      description: 员工 HttpOnly + Secure + SameSite=Lax 会话 Cookie，契约约定名 A_CLINIC_SESSION。
+    StaffCsrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: 员工状态变更的 CSRF 令牌，契约约定请求头 X-CSRF-Token。
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+      description: 分页游标
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        maxLength: 64
+      description: 客户端幂等键；作用域为账号＋操作＋键，operation_request 去重。
+    AppointmentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 预约编号
+    ScheduleId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 排班编号
+    BranchIdQuery:
+      name: branch_id
+      in: query
+      required: true
+      schema:
+        type: string
+      description: 门店编号
+    BranchId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 门店编号
+    BranchPathId:
+      name: branch_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 任职门店编号（路径参数 branch_id）
+    StaffId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 员工编号
+    ItemId:
+      name: item_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 项目编号
+    DoctorId:
+      name: doctor_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 医生编号（路径参数 doctor_id）
+    DoctorPathId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 医生编号（路径参数 id）
+    AccountId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 账号编号
+    PatientId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 患者编号
+    ChangeId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 改约方案编号
+    UnavailableId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 资源禁用编号
+    RestrictionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 限制编号
+    EventId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 履约事件编号
+    PolicyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 政策版本编号
+
+  responses:
+    Unauthorized:
+      description: 未认证或会话失效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: 无操作权限或超出本人/门店范围（限制 403 附本人可见结束时刻与人工联系方式）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 不可见或不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 版本/资源/幂等冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unprocessable:
+      description: 字段、未知字段或业务前置不满足
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: 超过频率限制
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    WechatExchangeFailed:
+      description: 微信身份换取失败（code 无效/已用/超时/畸形响应），请重新获取登录凭证
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    WechatNotConfigured:
+      description: 微信登录未配置（服务端缺 AppID/Secret），不会降级 mock
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    StockItem:
+      type: object
+      required: [stock_item_id, code, name, kind, specification, base_unit, storage_condition, enabled]
+      properties:
+        stock_item_id: {type: string}
+        code: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [耗材]}
+        specification: {type: string}
+        base_unit: {type: string}
+        storage_condition: {type: string}
+        enabled: {type: boolean}
+    StockItemCreate:
+      type: object
+      additionalProperties: false
+      required: [code, name, specification, base_unit, storage_condition]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 40}
+        name: {type: string, minLength: 1, maxLength: 120}
+        specification: {type: string, minLength: 1, maxLength: 120}
+        base_unit: {type: string, minLength: 1, maxLength: 20}
+        storage_condition: {type: string, minLength: 1, maxLength: 200}
+    StockItemPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StockItem'}}
+        next_cursor: {type: string, nullable: true}
+    StockItemResult:
+      type: object
+      required: [data, request_id]
+      properties:
+        data: {$ref: '#/components/schemas/StockItem'}
+        request_id: {type: string}
+    Warehouse:
+      type: object
+      required: [warehouse_id, branch_id, name, enabled]
+      properties:
+        warehouse_id: {type: string}
+        branch_id: {type: string}
+        name: {type: string}
+        enabled: {type: boolean}
+    WarehouseCreate:
+      type: object
+      additionalProperties: false
+      required: [branch_id, name]
+      properties:
+        branch_id: {type: string}
+        name: {type: string, minLength: 1, maxLength: 80}
+    WarehousePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Warehouse'}}
+        next_cursor: {type: string, nullable: true}
+    WarehouseResult:
+      type: object
+      required: [data, request_id]
+      properties:
+        data: {$ref: '#/components/schemas/Warehouse'}
+        request_id: {type: string}
+    ReceiptLineCreate:
+      type: object
+      additionalProperties: false
+      required: [line_no, stock_item_id, warehouse_id, manufacturer, batch_no, expires_on, quantity, unit_cost]
+      properties:
+        line_no: {type: integer, minimum: 1}
+        stock_item_id: {type: string}
+        warehouse_id: {type: string}
+        manufacturer: {type: string, minLength: 1, maxLength: 120}
+        holder_name: {type: string, nullable: true, maxLength: 120}
+        batch_no: {type: string, minLength: 1, maxLength: 80}
+        expires_on: {type: string, format: date}
+        trace_reference: {type: string, nullable: true, maxLength: 300}
+        quantity: {type: number, multipleOf: 0.001, exclusiveMinimum: true, minimum: 0}
+        unit_cost: {type: number, multipleOf: 0.0001, exclusiveMinimum: true, minimum: 0}
+    ReceiptCreate:
+      type: object
+      additionalProperties: false
+      required: [branch_id, supplier_id, document_no, supplier_document, lines]
+      properties:
+        branch_id: {type: string}
+        supplier_id: {type: string}
+        document_no: {type: string, minLength: 1, maxLength: 80}
+        supplier_document: {type: string, minLength: 1, maxLength: 100}
+        lines: {type: array, minItems: 1, maxItems: 50, items: {$ref: '#/components/schemas/ReceiptLineCreate'}}
+    ReceiptLine:
+      type: object
+      required: [receipt_line_id, line_no, warehouse_id, quantity, unit_cost, batch_id, batch_no,
+        manufacturer, expires_on, batch_state, stock_item_id, item_code, item_name, base_unit]
+      properties:
+        receipt_line_id: {type: string}
+        line_no: {type: integer}
+        warehouse_id: {type: string}
+        quantity: {type: number}
+        unit_cost: {type: number}
+        batch_id: {type: string}
+        batch_no: {type: string}
+        manufacturer: {type: string}
+        holder_name: {type: string, nullable: true}
+        expires_on: {type: string, format: date}
+        trace_reference: {type: string, nullable: true}
+        batch_state: {type: string, enum: [合格, 隔离, 召回]}
+        stock_item_id: {type: string}
+        item_code: {type: string}
+        item_name: {type: string}
+        base_unit: {type: string}
+    Receipt:
+      type: object
+      required: [receipt_id, branch_id, supplier_id, document_no, supplier_document, received_at, accepted_by, state]
+      properties:
+        receipt_id: {type: string}
+        branch_id: {type: string}
+        supplier_id: {type: string}
+        document_no: {type: string}
+        supplier_document: {type: string}
+        received_at: {type: string, format: date-time}
+        accepted_by: {type: string}
+        state: {type: string, enum: [已过账]}
+        lines: {type: array, items: {$ref: '#/components/schemas/ReceiptLine'}}
+        acquisition_cost_total: {type: number, description: 明细数量乘单位取得成本之和，最后按 HALF_UP 舍入到分；不是已付款或税额}
+        cost_note: {type: string}
+    ReceiptPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Receipt'}}
+        next_cursor: {type: string, nullable: true}
+    ReceiptResult:
+      type: object
+      required: [data, request_id]
+      properties:
+        data: {$ref: '#/components/schemas/Receipt'}
+        request_id: {type: string}
+    StockBalance:
+      type: object
+      required: [warehouse_id, branch_id, batch_id, stock_item_id, quantity]
+      properties:
+        warehouse_id: {type: string}
+        branch_id: {type: string}
+        warehouse_name: {type: string}
+        batch_id: {type: string}
+        batch_no: {type: string}
+        manufacturer: {type: string}
+        expires_on: {type: string, format: date}
+        batch_state: {type: string}
+        stock_item_id: {type: string}
+        code: {type: string}
+        item_name: {type: string}
+        base_unit: {type: string}
+        quantity: {type: number}
+    StockBalancePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StockBalance'}}
+        next_cursor: {type: string, nullable: true}
+    SupplierRow:
+      type: object
+      required: [supplier_id, name, credit_code, valid_to, enabled, verified_at]
+      properties:
+        supplier_id: {type: string}
+        name: {type: string}
+        credit_code: {type: string}
+        valid_to: {type: string, format: date, nullable: true}
+        enabled: {type: boolean}
+        verified_at: {type: string, format: date-time}
+    SupplierDetail:
+      allOf:
+        - $ref: '#/components/schemas/SupplierRow'
+        - type: object
+          required: [qualification_ref, verified_by]
+          properties:
+            qualification_ref: {type: string}
+            verified_by: {type: string}
+    InternalContact:
+      type: object
+      required: [branch_id, branch_name, peer_staff_id, peer_name, actor_role]
+      properties:
+        branch_id: {type: string}
+        branch_name: {type: string}
+        peer_staff_id: {type: string}
+        peer_name: {type: string}
+        actor_role: {type: string, enum: [frontdesk, dentist]}
+    InternalMessage:
+      type: object
+      required: [message_id, sender_account_id, body, sent_at]
+      properties:
+        message_id: {type: string}
+        sender_account_id: {type: string}
+        body: {type: string, maxLength: 500}
+        sent_at: {type: string, format: date-time}
+    InternalMessagePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/InternalMessage'}}
+        next_cursor: {type: string, nullable: true}
+    BookingAvailabilityItem:
+      type: object
+      required: [schedule_id, item_id, slots]
+      properties:
+        schedule_id: {type: string}
+        item_id: {type: string}
+        duration_minutes:
+          type: integer
+          minimum: 1
+          description: 患者预约候选所用的排班项目实际时长；复诊计划以此与计划时长比较
+        slots:
+          type: array
+          description: 后端生成的候选项；不代表预占，提交仍可能冲突
+          items: {type: string, format: date-time}
+    BookingAppointment:
+      type: object
+      properties:
+        appointment_id: {type: string}
+        previous_id: {type: string, nullable: true}
+        patient_id: {type: string}
+        patient_name: {type: string}
+        schedule_id: {type: string, nullable: true}
+        dentist_name: {type: string}
+        branch_id: {type: string}
+        branch_name: {type: string}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        visit_type: {type: string}
+        channel: {type: string}
+        state: {type: string}
+        coordination_state: {type: string, enum: [无需协调, 待协调, 已处理]}
+        unavailability_alert: {type: boolean, description: 后端按有效停诊或该预约所占资源的有效禁用实时计算；true 表示需人工处理，不代表已通知患者}
+        version: {type: integer}
+        purpose: {type: string}
+        item_name: {type: string}
+    Error:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+          description: 业务错误码，如 POLICY_CHANGED、SLOT_UNAVAILABLE、IDEMPOTENCY_CONFLICT、ACCOUNT_EXISTS、NOT_ACTIVATED、VERSION_CONFLICT、UNKNOWN_FIELD、WECHAT_NOT_CONFIGURED、WECHAT_EXCHANGE_FAILED、REGISTRATION_TOKEN_INVALID、WECHAT_IDENTITY_ALREADY_BOUND、PATIENT_DUPLICATE_SUSPECTED、BINDING_TOKEN_INVALID、PATIENT_ALREADY_BOUND、PATIENT_ACCOUNT_DISABLED、BUSINESS_BASIS_REQUIRED、BINDING_TOKEN_ALREADY_ACTIVE、STALE_BINDING_REISSUE
+        message:
+          type: string
+        request_id:
+          type: string
+        field_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+
+    # ---- 枚举 ----
+    AppointmentState:
+      type: string
+      enum: [待确认, 已确认, 候诊中, 接诊中, 已完成, 已取消, 未到, 已改约]
+    CoordinationState:
+      type: string
+      enum: [无需协调, 待协调, 已处理]
+    VisitType:
+      type: string
+      enum: [初诊, 复诊]
+    Channel:
+      type: string
+      enum: [患者端, 电话, 微信登记, 现场]
+    AllergyStatus:
+      type: string
+      enum: [未申报, 无已知, 有, 不确定]
+    RoleCode:
+      type: string
+      enum: [patient, frontdesk, dentist, owner, sysadmin, inventory, finance]
+    CredentialVerificationState:
+      type: string
+      enum: [pending, verified, rejected]
+    BranchState:
+      type: string
+      enum: [草稿, 待核验, 营业, 停用]
+    ScheduleState:
+      type: string
+      enum: [草稿, 已发布, 暂停, 已结束]
+    ScheduleServiceType:
+      type: string
+      enum: [初诊, 复诊, 两者]
+    BookingPolicyStatus:
+      type: string
+      enum: [draft, published, retired]
+    BookingEventKind:
+      type: string
+      enum: [临近取消, 核实未到]
+    BookingEventState:
+      type: string
+      enum: [待核实, 计入, 豁免]
+    RestrictionState:
+      type: string
+      enum: [生效, 到期, 已撤销]
+    UnavailabilityState:
+      type: string
+      enum: [有效, 已撤销]
+    AffectedAppointmentSummary:
+      type: object
+      required: [appointment_id, starts_at, ends_at, state, coordination_state, item_name, branch_id, branch_name]
+      properties:
+        appointment_id: {type: string}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        state: {type: string}
+        coordination_state: {type: string}
+        item_name: {type: string}
+        branch_id: {type: string}
+        branch_name: {type: string}
+      description: 只含协调所需的最小预约摘要，不含患者姓名、电话或证件信息。
+    DentistUnavailabilityItem:
+      type: object
+      required: [absence_id, doctor_id, doctor_name, starts_at, ends_at, reason, state, recorded_by, recorded_at, affected_count, affected_appointments]
+      properties:
+        absence_id: {type: string}
+        doctor_id: {type: string}
+        doctor_name: {type: string}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        reason: {type: string}
+        state: {$ref: '#/components/schemas/UnavailabilityState'}
+        recorded_by: {type: string}
+        recorded_at: {type: string, format: date-time}
+        resolved_at: {type: string, format: date-time, nullable: true}
+        resolved_by: {type: string, nullable: true}
+        resolve_basis: {type: string, nullable: true}
+        affected_count: {type: integer}
+        affected_appointments:
+          type: array
+          items: {$ref: '#/components/schemas/AffectedAppointmentSummary'}
+    DentistUnavailabilityPage:
+      type: object
+      required: [data, request_id]
+      properties:
+        data:
+          type: object
+          required: [items, generated_at]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/DentistUnavailabilityItem'}
+            generated_at: {type: string, format: date-time}
+        request_id: {type: string}
+    DentistUnavailabilityResult:
+      type: object
+      required: [data, request_id]
+      properties:
+        data: {$ref: '#/components/schemas/DentistUnavailabilityItem'}
+        request_id: {type: string}
+    ResourceKind:
+      type: string
+      enum: [维护, 故障]
+    ResourceUnavailableState:
+      type: string
+      enum: [有效, 已撤销]
+    ResolveType:
+      type: string
+      enum: [误登记撤销, 已修复]
+    ResourceUnavailabilityResult:
+      type: object
+      required: [data, request_id]
+      properties:
+        data:
+          type: object
+          required: [unavailable_id, resource_id, kind, starts_at, ends_at, state, resolved_at, resolve_type, resolved_by]
+          properties:
+            unavailable_id: {type: string}
+            resource_name: {type: string}
+            resource_type: {type: string}
+            branch_id: {type: string}
+            branch_name: {type: string}
+            reason: {type: string}
+            recorded_by: {type: string}
+            recorded_at: {type: string, format: date-time}
+            affected_count: {type: integer}
+            affected_appointments:
+              type: array
+              items: {$ref: '#/components/schemas/AffectedAppointmentSummary'}
+            resource_id: {type: string}
+            kind: {$ref: '#/components/schemas/ResourceKind'}
+            starts_at: {type: string, format: date-time}
+            ends_at: {type: string, format: date-time}
+            state: {$ref: '#/components/schemas/ResourceUnavailableState'}
+            resolved_at: {type: string, format: date-time, nullable: true}
+            resolve_type: {type: string, nullable: true, enum: [误登记撤销, 已修复]}
+            resolved_by: {type: string, nullable: true}
+        request_id: {type: string}
+    ResourceUnavailabilityItem:
+      type: object
+      required: [unavailable_id, resource_id, resource_name, resource_type, branch_id, branch_name, kind, starts_at, ends_at, reason, state, recorded_by, recorded_at, affected_count, affected_appointments]
+      properties:
+        unavailable_id: {type: string}
+        resource_id: {type: string}
+        resource_name: {type: string}
+        resource_type: {$ref: '#/components/schemas/ResourceType'}
+        branch_id: {type: string}
+        branch_name: {type: string}
+        kind: {$ref: '#/components/schemas/ResourceKind'}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        reason: {type: string}
+        state: {$ref: '#/components/schemas/ResourceUnavailableState'}
+        recorded_by: {type: string}
+        recorded_at: {type: string, format: date-time}
+        resolved_at: {type: string, format: date-time, nullable: true}
+        resolved_by: {type: string, nullable: true}
+        resolve_type: {type: string, nullable: true, enum: [误登记撤销, 已修复]}
+        resolve_basis: {type: string, nullable: true}
+        affected_count: {type: integer}
+        affected_appointments:
+          type: array
+          items: {$ref: '#/components/schemas/AffectedAppointmentSummary'}
+    ResourceUnavailabilityPage:
+      type: object
+      required: [data, request_id]
+      properties:
+        data:
+          type: object
+          required: [items, branch_id, generated_at]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/ResourceUnavailabilityItem'}
+            branch_id: {type: string}
+            generated_at: {type: string, format: date-time}
+        request_id: {type: string}
+    ResourceBookingState:
+      type: string
+      enum: [有效, 已释放]
+    ResourceType:
+      type: string
+      enum: [牙椅, 独立预约设备]
+    ResourceOperatingState:
+      type: string
+      enum: [可用, 停用, 退役]
+    QueueState:
+      type: string
+      enum: [候诊, 呼叫中, 过号, 已接诊, 已退出]
+    FollowupPlanState:
+      type: string
+      enum: [待协调, 已预约, 已完成, 已终止]
+    AppointmentChangeState:
+      type: string
+      enum: [待答复, 已同意, 已拒绝, 已撤回, 已落实]
+    DoctorPreferenceSource:
+      type: string
+      enum: [本人选择, 熟人推荐, 既往就诊]
+    CheckinChannel:
+      type: string
+      enum: [小程序, 前台]
+    StaffType:
+      type: string
+      enum: [牙医, 其他人员]
+    VerificationMethod:
+      type: string
+      enum: [visit_evidence, id_document]
+      description: 现场核对既有就诊凭据 / 现场核对证件但不采集号码
+
+    # ---- 身份 ----
+    WechatLoginResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/WechatSession'
+            - $ref: '#/components/schemas/WechatRegistration'
+          discriminator:
+            propertyName: kind
+            mapping:
+              session: '#/components/schemas/WechatSession'
+              registration: '#/components/schemas/WechatRegistration'
+    WechatSession:
+      type: object
+      additionalProperties: false
+      required: [kind, session_token, expires_at]
+      properties:
+        kind:
+          type: string
+          enum: [session]
+        session_token:
+          type: string
+          description: 服务端签发不透明令牌
+        expires_at:
+          type: string
+          format: date-time
+      description: 已绑定分支；additionalProperties:false 禁止混入 registration_token 等注册分支凭证字段。
+    WechatRegistration:
+      type: object
+      additionalProperties: false
+      required: [kind, registration_token, registration_expires_at]
+      properties:
+        kind:
+          type: string
+          enum: [registration]
+        registration_token:
+          type: string
+          description: 短期注册上下文
+        registration_expires_at:
+          type: string
+          format: date-time
+      description: 未绑定分支；additionalProperties:false 禁止混入 session_token 等会话分支凭证字段。
+    PatientSelfRegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [registration_token, name, phone, allergy_status]
+      properties:
+        registration_token:
+          type: string
+          description: 自助注册必须提供，消费后失效
+        name:
+          type: string
+          maxLength: 60
+        phone:
+          type: string
+          maxLength: 30
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+        allergy_status:
+          $ref: '#/components/schemas/AllergyStatus'
+        allergy_notes:
+          type: string
+          description: allergy_status 为 有/不确定 时必填
+    StaffCreatePatientRequest:
+      type: object
+      additionalProperties: false
+      required: [branch_id, name, phone, allergy_status, verification_method, verification_result, in_person]
+      properties:
+        branch_id: {type: string}
+        name: {type: string, maxLength: 60}
+        phone: {type: string, maxLength: 30}
+        birth_date: {type: string, format: date, nullable: true}
+        allergy_status: {$ref: '#/components/schemas/AllergyStatus'}
+        allergy_notes: {type: string, maxLength: 1000, nullable: true}
+        verification_method: {type: string, enum: [visit_evidence, id_document]}
+        verification_result: {type: string, enum: [confirmed]}
+        in_person: {type: boolean}
+        duplicate_resolution: {type: string, enum: [shared_phone, same_name], nullable: true, description: 仅实际存在对应冲突时允许}
+        source_channel: {type: string, enum: [现场, 电话, 转介绍, 微信小程序, 其他], nullable: true, description: 明确获知渠道；未采集不推断}
+      description: 前台建档；不创建账号/微信；明文选择凭证只返回一次。
+    PatientReceptionCreateResult:
+      type: object
+      required: [patient_id, branch_id]
+      properties:
+        patient_id: {type: string}
+        branch_id: {type: string}
+        selection_token: {type: string, description: 首次返回，明文仅一次}
+        expires_at: {type: string, format: date-time}
+        token_shown_once: {type: boolean}
+        message: {type: string}
+    PatientSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [branch_id, name, phone, verification_method, verification_result, in_person, resolution]
+      properties:
+        branch_id: {type: string}
+        name: {type: string, maxLength: 60}
+        phone: {type: string, maxLength: 30}
+        verification_method: {type: string, enum: [visit_evidence, id_document]}
+        verification_result: {type: string, enum: [confirmed]}
+        in_person: {type: boolean}
+        resolution: {type: string, enum: [single_exact, manual_candidate, shared_phone, same_name], description: 服务端按实际精确/同电话/同名匹配计算，不接受客户端自报分类}
+    PatientSelectionResult:
+      type: object
+      required: [selection_token, expires_at]
+      properties:
+        selection_token: {type: string}
+        expires_at: {type: string, format: date-time}
+    PatientSessionResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [session_token, patient_id]
+          properties:
+            session_token:
+              type: string
+            patient_id:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+    BindingTokenIssueResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [binding_token, replayed, challenge_ref, expires_at, status]
+          properties:
+            binding_token:
+              type: string
+              nullable: true
+              description: 首发明文；重放为 null
+            replayed:
+              type: boolean
+            challenge_ref:
+              type: string
+              description: 凭证引用（UUID），用于重签 previous_challenge_ref
+            expires_at:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [active, consumed, revoked, expired, exhausted]
+    Me:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [account_id, name, roles, must_change_password]
+          properties:
+            account_id:
+              type: string
+            name:
+              type: string
+            identity_type:
+              type: string
+              enum: [patient, staff]
+            must_change_password:
+              type: boolean
+            roles:
+              type: array
+              items:
+                type: object
+                required: [role_code, branch_ids]
+                properties:
+                  role_code:
+                    $ref: '#/components/schemas/RoleCode'
+                  branch_ids:
+                    type: array
+                    items:
+                      type: string
+    PatientProfile:
+      type: object
+      required: [patient_id, name, phone, allergy_status, version]
+      properties:
+        patient_id:
+          type: string
+        name:
+          type: string
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        emergency_name:
+          type: string
+          nullable: true
+        emergency_phone:
+          type: string
+          nullable: true
+        primary_dentist_id:
+          type: string
+          nullable: true
+        allergy_status:
+          $ref: '#/components/schemas/AllergyStatus'
+        allergy_notes:
+          type: string
+          nullable: true
+        version:
+          type: integer
+
+    # ---- 基础配置 ----
+    BranchRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, address, phone, license_no, opening_hours, manager_id]
+      properties:
+        code:
+          type: string
+          maxLength: 30
+        name:
+          type: string
+          maxLength: 100
+        address:
+          type: string
+          maxLength: 300
+        phone:
+          type: string
+          maxLength: 30
+        license_no:
+          type: string
+          maxLength: 80
+        license_valid_to:
+          type: string
+          format: date
+        opening_hours:
+          type: string
+          maxLength: 200
+        manager_id:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      description: organization_id 由服务端按唯一经营主体确定；manager_id 首期必须等于当前创建者。
+    BranchDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [branch_id, code, name, address, phone, license_no, license_no_expiry_confirmed, opening_hours, manager_id, state, version, reauthentication_required]
+          properties:
+            branch_id:
+              type: string
+            code:
+              type: string
+            name:
+              type: string
+            address:
+              type: string
+            phone:
+              type: string
+            license_no:
+              type: string
+            license_valid_to:
+              type: string
+              format: date
+              nullable: true
+            license_no_expiry_confirmed:
+              type: boolean
+              description: 仅由未来核验动作确认；创建时为 false，null 不等于永久有效
+            opening_hours:
+              type: string
+            manager_id:
+              type: string
+            state:
+              $ref: '#/components/schemas/BranchState'
+            verified_by:
+              type: string
+              nullable: true
+            verified_at:
+              type: string
+              format: date-time
+              nullable: true
+            version:
+              type: integer
+              minimum: 1
+            reauthentication_required:
+              type: boolean
+              description: 首次创建因新增本店授权递增 auth_version 并撤销会话时为 true；重放为 false
+    BranchPatchRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      description: 只修改出现的字段；必填档案字段不能显式 null；manager_id/state/verified/无期限标志不可写。
+      properties:
+        code:
+          type: string
+          maxLength: 30
+        name:
+          type: string
+          maxLength: 100
+        address:
+          type: string
+          maxLength: 300
+        phone:
+          type: string
+          maxLength: 30
+        license_no:
+          type: string
+          maxLength: 80
+        license_valid_to:
+          type: string
+          format: date
+          nullable: true
+        opening_hours:
+          type: string
+          maxLength: 200
+        expected_version:
+          type: integer
+          minimum: 1
+    BranchVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1
+    BranchVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, verification_basis]
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1
+        verification_basis:
+          type: string
+          minLength: 1
+          maxLength: 300
+        license_no_expiry_confirmed:
+          type: boolean
+          description: 许可有效期为 null 时必须为 true；有日期时必须为 false/省略
+    BranchDisableRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 300
+    BranchMutationResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [branch_id, state, version, reauthentication_required]
+          properties:
+            branch_id:
+              type: string
+            state:
+              $ref: '#/components/schemas/BranchState'
+            version:
+              type: integer
+              minimum: 1
+            reauthentication_required:
+              type: boolean
+    BranchImpactError:
+      type: object
+      required: [code, message, request_id, impact]
+      properties:
+        code:
+          type: string
+          enum: [BRANCH_HAS_FUTURE_COMMITMENTS]
+        message:
+          type: string
+        request_id:
+          type: string
+        impact:
+          type: object
+          required: [schedule_count, appointment_count, first_starts_at, last_ends_at]
+          properties:
+            schedule_count:
+              type: integer
+              minimum: 0
+            appointment_count:
+              type: integer
+              minimum: 0
+            first_starts_at:
+              type: string
+              format: date-time
+              nullable: true
+            last_ends_at:
+              type: string
+              format: date-time
+              nullable: true
+    OpeningIntervalInput:
+      type: object
+      additionalProperties: false
+      required: [valid_on, starts_at, ends_at]
+      properties:
+        valid_on:
+          type: string
+          format: date
+        starts_at:
+          type: string
+          format: date-time
+          description: 输入精度为整秒；非零小数秒拒绝，.000 与整秒等价。
+        ends_at:
+          type: string
+          format: date-time
+          description: 输入精度为整秒；非零小数秒拒绝，.000 与整秒等价。
+    OpeningIntervalReplaceRequest:
+      type: object
+      additionalProperties: false
+      required: [from_date, to_date, intervals, expected_version]
+      properties:
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+        expected_version:
+          type: integer
+          minimum: 1
+        intervals:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/OpeningIntervalInput'
+    OpeningIntervalResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [branch_id, from_date, to_date, version, intervals]
+          properties:
+            branch_id:
+              type: string
+            from_date:
+              type: string
+              format: date
+            to_date:
+              type: string
+              format: date
+            version:
+              type: integer
+              minimum: 1
+            intervals:
+              type: array
+              items:
+                type: object
+                required: [valid_on, starts_at, ends_at]
+                properties:
+                  valid_on:
+                    type: string
+                    format: date
+                  starts_at:
+                    type: string
+                    format: date-time
+                  ends_at:
+                    type: string
+                    format: date-time
+    OpeningCoverageError:
+      type: object
+      required: [code, message, request_id, impact]
+      properties:
+        code:
+          type: string
+          enum: [OPENING_INTERVAL_COVERAGE_CONFLICT]
+        message:
+          type: string
+        request_id:
+          type: string
+        impact:
+          type: object
+          required: [schedule_count, appointment_count, first_starts_at, last_ends_at]
+          properties:
+            schedule_count:
+              type: integer
+              minimum: 0
+            appointment_count:
+              type: integer
+              minimum: 0
+            first_starts_at:
+              type: string
+              format: date-time
+              nullable: true
+            last_ends_at:
+              type: string
+              format: date-time
+              nullable: true
+    BranchPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [branch_id, code, name, state, version, manager_id]
+            properties:
+              branch_id:
+                type: string
+              code:
+                type: string
+              name:
+                type: string
+              state:
+                $ref: '#/components/schemas/BranchState'
+              version:
+                type: integer
+                minimum: 1
+              manager_id:
+                type: string
+        next_cursor:
+          type: string
+          nullable: true
+    CredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [credential_type, certificate_no, no_expiry_confirmed]
+      properties:
+        credential_type:
+          type: string
+          maxLength: 40
+        certificate_no:
+          type: string
+          maxLength: 80
+        valid_from:
+          type: string
+          format: date
+          nullable: true
+          description: 省略/空白/null均表示未填写起始日期；非法日期字符串拒绝
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+          description: 省略/空白/null均表示未填写截止日期；no_expiry_confirmed=true时必须为空
+        no_expiry_confirmed:
+          type: boolean
+          default: false
+    StaffMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [name, staff_type, job_title]
+      properties:
+        name:
+          type: string
+          maxLength: 60
+        staff_type:
+          $ref: '#/components/schemas/StaffType'
+        job_title:
+          type: string
+          maxLength: 60
+        practice_no:
+          type: string
+          maxLength: 60
+          nullable: true
+          description: 牙医必填；其他人员可为空
+        credential:
+          $ref: '#/components/schemas/CredentialRequest'
+    StaffMemberPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [staff_id, name, staff_type, job_title, employment_state]
+            properties:
+              staff_id:
+                type: string
+              name:
+                type: string
+              staff_type:
+                $ref: '#/components/schemas/StaffType'
+              job_title:
+                type: string
+              employment_state:
+                type: string
+                enum: [在岗, 离岗]
+              version:
+                type: integer
+                minimum: 1
+        next_cursor:
+          type: string
+          nullable: true
+    StaffMemberDetailResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [staff_id, name, staff_type, job_title, employment_state, version, branches, credentials]
+          properties:
+            staff_id:
+              type: string
+            name:
+              type: string
+            staff_type:
+              $ref: '#/components/schemas/StaffType'
+            job_title:
+              type: string
+            practice_no:
+              type: string
+              nullable: true
+            employment_state:
+              type: string
+              enum: [在岗, 离岗]
+            version:
+              type: integer
+              minimum: 1
+            branches:
+              type: array
+              items:
+                $ref: '#/components/schemas/StaffBranchSummary'
+            credentials:
+              type: array
+              items:
+                $ref: '#/components/schemas/CredentialSummary'
+    StaffBranchSummary:
+      type: object
+      required: [branch_id, name, state, enabled]
+      properties:
+        branch_id:
+          type: string
+        name:
+          type: string
+        state:
+          $ref: '#/components/schemas/BranchState'
+        enabled:
+          type: boolean
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+    CredentialSummary:
+      type: object
+      required: [credential_id, credential_type, verification_state, no_expiry_confirmed, effective]
+      properties:
+        credential_id:
+          type: string
+        credential_type:
+          type: string
+        verification_state:
+          $ref: '#/components/schemas/CredentialVerificationState'
+        valid_from:
+          type: string
+          format: date
+          nullable: true
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+        no_expiry_confirmed:
+          type: boolean
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        effective:
+          type: boolean
+          description: 该条资格自身审核状态与日期有效；不代表已取得排班/接诊授权，实际还需校验资格类别、在岗、任职、项目与时段
+    CredentialDetailResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [credential_id, staff_id, credential_type, verification_state, no_expiry_confirmed, version, effective, latest_review_id]
+          properties:
+            credential_id:
+              type: string
+            staff_id:
+              type: string
+            credential_type:
+              type: string
+            verification_state:
+              $ref: '#/components/schemas/CredentialVerificationState'
+            valid_from:
+              type: string
+              format: date
+              nullable: true
+            valid_to:
+              type: string
+              format: date
+              nullable: true
+            no_expiry_confirmed:
+              type: boolean
+            verified_at:
+              type: string
+              format: date-time
+              nullable: true
+            version:
+              type: integer
+              minimum: 1
+            effective:
+              type: boolean
+              description: 该条资格自身状态与日期有效，不代表排班/接诊授权
+            latest_review_id:
+              type: string
+    CredentialFactsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [credential_id, staff_id, credential_type, certificate_no, valid_from, valid_to, no_expiry_confirmed, verification_state, version]
+          properties:
+            credential_id:
+              type: string
+            staff_id:
+              type: string
+            credential_type:
+              type: string
+            certificate_no:
+              type: string
+              description: 敏感证书编号；仅受控单条读取，不得写入前端日志或普通列表
+            valid_from:
+              type: string
+              format: date
+              nullable: true
+            valid_to:
+              type: string
+              format: date
+              nullable: true
+            no_expiry_confirmed:
+              type: boolean
+            verification_state:
+              $ref: '#/components/schemas/CredentialVerificationState'
+            version:
+              type: integer
+              minimum: 1
+    CredentialRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [basis, expected_version]
+      properties:
+        basis:
+          type: string
+          minLength: 1
+          maxLength: 300
+        expected_version:
+          type: integer
+          minimum: 1
+    CredentialReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, basis, expected_version]
+      properties:
+        decision:
+          type: string
+          enum: [verified, rejected]
+        basis:
+          type: string
+          maxLength: 300
+        expected_version:
+          type: integer
+          minimum: 1
+    CredentialReviewItem:
+      type: object
+      required: [review_id, credential_id, action, to_state, actor_staff_id, occurred_at, resulting_version]
+      properties:
+        review_id:
+          type: string
+        credential_id:
+          type: string
+        action:
+          type: string
+          enum: [submit, verify, reject, revoke]
+        from_state:
+          type: string
+          nullable: true
+          enum: [pending, verified, rejected]
+        to_state:
+          type: string
+          enum: [pending, verified, rejected]
+        actor_staff_id:
+          type: string
+        basis:
+          type: string
+          nullable: true
+        occurred_at:
+          type: string
+          format: date-time
+        resulting_version:
+          type: integer
+          minimum: 1
+    CredentialReviewPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CredentialReviewItem'
+        next_cursor:
+          type: string
+          nullable: true
+    ServiceItemRequest:
+      type: object
+      additionalProperties: false
+      required: [category_id, name, unit, current_price, suggested_minutes]
+      properties:
+        category_id:
+          type: string
+        name:
+          type: string
+          maxLength: 100
+        unit:
+          type: string
+          maxLength: 30
+        current_price:
+          type: string
+          description: 数字字符串 numeric(12,2)
+        suggested_minutes:
+          type: integer
+          minimum: 1
+        appointment_enabled:
+          type: boolean
+          default: true
+    ServiceItemResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [item_id, name, current_price, appointment_enabled]
+          properties:
+            item_id:
+              type: string
+            name:
+              type: string
+            current_price:
+              type: string
+            appointment_enabled:
+              type: boolean
+    ServiceItemPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [item_id, name, current_price, appointment_enabled]
+            properties:
+              item_id:
+                type: string
+              name:
+                type: string
+              current_price:
+                type: string
+              appointment_enabled:
+                type: boolean
+        next_cursor:
+          type: string
+          nullable: true
+    ResourceResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [resource_id, name, resource_type, operating_state]
+          properties:
+            resource_id:
+              type: string
+            name:
+              type: string
+            resource_type:
+              $ref: '#/components/schemas/ResourceType'
+            operating_state:
+              $ref: '#/components/schemas/ResourceOperatingState'
+    ResourcePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [resource_id, name, resource_type, operating_state]
+            properties:
+              resource_id:
+                type: string
+              name:
+                type: string
+              resource_type:
+                $ref: '#/components/schemas/ResourceType'
+              operating_state:
+                $ref: '#/components/schemas/ResourceOperatingState'
+              branch_id:
+                type: string
+              branch_name:
+                type: string
+        next_cursor:
+          type: string
+          nullable: true
+    StaffAccountCreated:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [account_id, login_name, staff_id, enabled, must_change_password, state]
+          properties:
+            account_id:
+              type: string
+            login_name:
+              type: string
+            staff_id:
+              type: string
+            enabled:
+              type: boolean
+            must_change_password:
+              type: boolean
+            state:
+              type: string
+              enum: [pending_activation, active, disabled]
+    AccountPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [account_id, login_name, enabled, state]
+            properties:
+              account_id:
+                type: string
+              login_name:
+                type: string
+              enabled:
+                type: boolean
+              state:
+                type: string
+                enum: [pending_activation, active, disabled]
+        next_cursor:
+          type: string
+          nullable: true
+
+    StaffRoleScopes:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [account_id, state, version, roles]
+          properties:
+            account_id:
+              type: string
+            state:
+              type: string
+              enum: [pending_activation, active, disabled]
+            version:
+              type: integer
+              minimum: 1
+              description: account.auth_version 的并发令牌；不是登录凭证
+            roles:
+              type: array
+              items:
+                type: object
+                required: [role_code, branch_ids, approval_basis]
+                properties:
+                  role_code:
+                    $ref: '#/components/schemas/RoleCode'
+                  branch_ids:
+                    type: array
+                    items:
+                      type: string
+                  approval_basis:
+                    type: string
+    StaffRoleScopesUpdated:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [account_id, version]
+          properties:
+            account_id:
+              type: string
+            version:
+              type: integer
+              minimum: 1
+
+    # ---- 公开查询与预约 ----
+    PublicBranch:
+      type: object
+      required: [branch_id, name, address, phone, opening_hours]
+      properties:
+        branch_id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        opening_hours:
+          type: string
+        public_intro:
+          type: string
+          nullable: true
+          maxLength: 500
+    PublicBranchPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicBranch'
+        next_cursor:
+          type: string
+          nullable: true
+    PublicDoctor:
+      type: object
+      required: [doctor_id, name, branches]
+      properties:
+        doctor_id:
+          type: string
+        name:
+          type: string
+        job_title:
+          type: string
+        public_intro:
+          type: string
+          nullable: true
+          maxLength: 500
+        branches:
+          type: array
+          items:
+            type: object
+            properties:
+              branch_id:
+                type: string
+              branch_name:
+                type: string
+    PublicDoctorPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicDoctor'
+        next_cursor:
+          type: string
+          nullable: true
+    Slot:
+      type: object
+      required: [schedule_id, starts_at, ends_at, dentist_id, policy_id]
+      properties:
+        schedule_id:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        dentist_id:
+          type: string
+        policy_id:
+          type: string
+    SlotPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+        next_cursor:
+          type: string
+          nullable: true
+    DoctorPreferencePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [dentist_id, source, created_at]
+            properties:
+              dentist_id:
+                type: string
+              source:
+                $ref: '#/components/schemas/DoctorPreferenceSource'
+              created_at:
+                type: string
+                format: date-time
+        next_cursor:
+          type: string
+          nullable: true
+    FollowupPlanPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [plan_id, purpose, state, suggested_from, suggested_to]
+            properties:
+              plan_id:
+                type: string
+              purpose:
+                type: string
+              state:
+                $ref: '#/components/schemas/FollowupPlanState'
+              suggested_from:
+                type: string
+                format: date
+              suggested_to:
+                type: string
+                format: date
+              service_item_id:
+                type: string
+                nullable: true
+        next_cursor:
+          type: string
+          nullable: true
+    PatientAppointmentView:
+      type: object
+      required: [appointment_id, previous_id, patient_id, patient_name, schedule_id, dentist_name, branch_id, branch_name, starts_at, ends_at, visit_type, channel, state, version, purpose, item_name, ticket_id, queue_no]
+      properties:
+        appointment_id: {type: string}
+        previous_id: {type: string, nullable: true}
+        patient_id: {type: string}
+        patient_name: {type: string}
+        schedule_id: {type: string, nullable: true}
+        dentist_name: {type: string, nullable: true}
+        branch_id: {type: string}
+        branch_name: {type: string}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        visit_type: {type: string}
+        channel: {type: string}
+        state: {type: string}
+        version: {type: integer}
+        purpose: {type: string}
+        item_name: {type: string, nullable: true}
+        ticket_id: {type: string, nullable: true, description: 已签到时的候诊票编号}
+        queue_no: {type: integer, nullable: true, description: 已签到时的当日候诊号码}
+    AppointmentSummary:
+      type: object
+      required: [appointment_id, state, coordination_state, starts_at, ends_at, version]
+      properties:
+        appointment_id:
+          type: string
+        state:
+          $ref: '#/components/schemas/AppointmentState'
+        coordination_state:
+          $ref: '#/components/schemas/CoordinationState'
+        confirmed_dentist_id:
+          type: string
+          description: 服务端计算，客户端不可指定
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+    AppointmentResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/AppointmentSummary'
+            - type: object
+              properties:
+                branch_id:
+                  type: string
+                visit_type:
+                  $ref: '#/components/schemas/VisitType'
+                policy_id:
+                  type: string
+                followup_plan_id:
+                  type: string
+                  nullable: true
+    AppointmentPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppointmentSummary'
+        next_cursor:
+          type: string
+          nullable: true
+    ChangeResponseResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [change_id, state]
+          properties:
+            change_id:
+              type: string
+            state:
+              $ref: '#/components/schemas/AppointmentChangeState'
+            applied:
+              type: boolean
+              description: 接受后是否已落实；false 表示待协调
+    ChangeProposalResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [change_id, state]
+          properties:
+            change_id:
+              type: string
+            state:
+              $ref: '#/components/schemas/AppointmentChangeState'
+    ChangeListResult:
+      type: object
+      required: [data, request_id]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [change_id, original_id, proposed_id, state, version, candidate_state, applied]
+            properties:
+              change_id: {type: string}
+              original_id: {type: string}
+              proposed_id: {type: string}
+              state:
+                $ref: '#/components/schemas/AppointmentChangeState'
+              version: {type: integer, minimum: 1}
+              candidate_state: {type: string}
+              applied: {type: boolean}
+        request_id: {type: string}
+
+    # ---- 排班 ----
+    ScheduleRequest:
+      type: object
+      additionalProperties: false
+      required: [dentist_id, branch_id, starts_at, ends_at, service_type]
+      properties:
+        dentist_id:
+          type: string
+        branch_id:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        service_type:
+          $ref: '#/components/schemas/ScheduleServiceType'
+        travel_buffer_minutes:
+          type: integer
+          minimum: 0
+        services:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [item_id, duration_minutes]
+            properties:
+              item_id:
+                type: string
+              duration_minutes:
+                type: integer
+                minimum: 1
+    ScheduleResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [schedule_id, dentist_id, branch_id, starts_at, ends_at, state, version]
+          properties:
+            schedule_id:
+              type: string
+            dentist_id:
+              type: string
+            branch_id:
+              type: string
+            starts_at:
+              type: string
+              format: date-time
+            ends_at:
+              type: string
+              format: date-time
+            state:
+              $ref: '#/components/schemas/ScheduleState'
+            version:
+              type: integer
+    SchedulePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [schedule_id, dentist_id, branch_id, starts_at, ends_at, state]
+            properties:
+              schedule_id:
+                type: string
+              dentist_id:
+                type: string
+              branch_id:
+                type: string
+              starts_at:
+                type: string
+                format: date-time
+              ends_at:
+                type: string
+                format: date-time
+              state:
+                $ref: '#/components/schemas/ScheduleState'
+        next_cursor:
+          type: string
+          nullable: true
+
+    # ---- 协调 ----
+    PatientMatch:
+      type: object
+      required: [patient_id, display_name, phone_suffix, match_type]
+      properties:
+        patient_id: {type: string}
+        display_name: {type: string, description: 脱敏姓名}
+        phone_suffix: {type: string, description: 电话后四位}
+        birth_year: {type: string, nullable: true}
+        match_type: {type: string, enum: [exact_name_phone, same_phone, same_name]}
+    ContactRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, channel, appointment_id, result]
+      properties:
+        kind:
+          type: string
+          enum: [人工联系]
+        channel:
+          type: string
+          enum: [电话, 微信登记, 当面]
+        appointment_id:
+          type: string
+        result:
+          type: string
+          maxLength: 300
+        acknowledgment_basis:
+          type: string
+          maxLength: 300
+        next_contact_at:
+          type: string
+          format: date-time
+    ContactTodoPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ContactTodo'}
+        next_cursor: {type: string, nullable: true}
+    ContactTodo:
+      type: object
+      required: [appointment_id, starts_at, last_contact_id, last_contacted_at, next_contact_at, acknowledged]
+      properties:
+        appointment_id: {type: string}
+        starts_at: {type: string, format: date-time}
+        last_contact_id: {type: string, nullable: true}
+        last_contacted_at: {type: string, format: date-time, nullable: true}
+        next_contact_at: {type: string, format: date-time, nullable: true}
+        acknowledged: {type: boolean}
+    ContactPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ManualContact'}
+        next_cursor:
+          type: string
+          nullable: true
+    ManualContact:
+      type: object
+      required: [contact_id, appointment_id, kind, channel, state, result, contacted_at, acknowledged, next_contact_at, staff_id]
+      properties:
+        contact_id: {type: string}
+        appointment_id: {type: string}
+        kind: {type: string, enum: [人工联系]}
+        channel: {type: string, enum: [电话, 微信登记, 当面]}
+        state: {type: string, enum: [已联系], description: 已登记人工尝试；是否真正知晓以 acknowledged 为准}
+        result: {type: string, maxLength: 300}
+        contacted_at: {type: string, format: date-time}
+        acknowledged: {type: boolean}
+        next_contact_at: {type: string, format: date-time, nullable: true}
+        staff_id: {type: string}
+
+    # ---- 签到 ----
+    BranchBookingConfigResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [branch_id, configured, self_checkin_enabled, early_minutes, late_minutes, slot_step_minutes, version, updated_at]
+          properties:
+            branch_id: {type: string}
+            configured: {type: boolean}
+            self_checkin_enabled: {type: boolean}
+            early_minutes: {type: integer, nullable: true, minimum: 0}
+            late_minutes: {type: integer, nullable: true, minimum: 0}
+            slot_step_minutes: {type: integer, minimum: 1}
+            version: {type: integer, minimum: 1}
+            updated_at: {type: string, format: date-time, nullable: true}
+    QueueTicket:
+      type: object
+      required: [ticket_id, appointment_id, queue_date, queue_no, state, checkin_channel]
+      properties:
+        ticket_id:
+          type: string
+        appointment_id:
+          type: string
+        queue_date:
+          type: string
+          format: date
+        queue_no:
+          type: integer
+        state:
+          $ref: '#/components/schemas/QueueState'
+        checkin_channel:
+          $ref: '#/components/schemas/CheckinChannel'
+    QueueTicketResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/QueueTicket'
+
+    # ---- 政策 ----
+    BookingPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [branch_id, late_hours, window_days, event_limit, restriction_days]
+      properties:
+        branch_id:
+          type: string
+        late_hours:
+          type: integer
+          minimum: 0
+        window_days:
+          type: integer
+          minimum: 1
+        event_limit:
+          type: integer
+          minimum: 1
+        restriction_days:
+          type: integer
+          minimum: 1
+        restriction_enabled:
+          type: boolean
+          default: false
+      description: version_no 由服务端按 UNIQUE(branch_id,version_no) 分配。
+    BookingPolicyResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [policy_id, branch_id, version_no, status, restriction_enabled, version]
+          properties:
+            policy_id:
+              type: string
+            branch_id:
+              type: string
+            version_no:
+              type: integer
+            status:
+              $ref: '#/components/schemas/BookingPolicyStatus'
+            restriction_enabled:
+              type: boolean
+            effective_at:
+              type: string
+              format: date-time
+            approved_by:
+              type: string
+              description: 服务端记录，客户端不可指定
+            version:
+              type: integer
+    RestrictionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [restriction_id, branch_id, state, starts_at, ends_at, reason]
+            properties:
+              restriction_id:
+                type: string
+              branch_id:
+                type: string
+              policy_id:
+                type: string
+              state:
+                $ref: '#/components/schemas/RestrictionState'
+              starts_at:
+                type: string
+                format: date-time
+              ends_at:
+                type: string
+                format: date-time
+              reason:
+                type: string
+        next_cursor:
+          type: string
+          nullable: true

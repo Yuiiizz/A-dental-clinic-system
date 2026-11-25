@@ -1,0 +1,11 @@
+.appt-card { margin-top: 14rpx; padding: 20rpx; border-radius: 14rpx; border: 1rpx solid #dcebe7; background: #fff; }
+.appt-card.selected { border-color: #187c6c; box-shadow: 0 0 0 2rpx #d8f1e9; }
+.appt-head { display: flex; justify-content: space-between; align-items: center; }
+.appt-title { font-size: 27rpx; font-weight: 650; color: #1c443e; }
+.appt-meta { margin-top: 6rpx; color: #728c86; font-size: 21rpx; }
+.appt-actions { display: flex; gap: 10rpx; margin-top: 12rpx; }
+.appt-actions button { flex: 1; font-size: 22rpx; margin: 0; }
+.message { margin-top: 14rpx; padding: 14rpx; border-radius: 10rpx; background: #fff5df; color: #7c5717; font-size: 22rpx; line-height: 1.55; }
+.reschedule-box { margin-top: 12rpx; padding: 14rpx; border-radius: 10rpx; background: #f3faf7; }
+.reschedule-box .pick-grid { margin-top: 8rpx; }
+.reschedule-box .mini-actions { margin-top: 10rpx; }

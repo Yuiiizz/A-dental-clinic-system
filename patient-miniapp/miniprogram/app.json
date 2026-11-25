@@ -1,0 +1,25 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/clinic/clinic",
+    "pages/doctors/doctors",
+    "pages/booking/booking",
+    "pages/appointments/appointments",
+    "pages/records/records",
+    "pages/payments/payments",
+    "pages/booking-flow/booking-flow",
+    "pages/real-booking/real-booking",
+    "pages/real-records/real-records",
+    "pages/index/index",
+    "pages/register/register",
+    "pages/bind/bind",
+    "pages/profile/profile"
+  ],
+  "window": {
+    "navigationBarTitleText": "A口腔诊所系统",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f7fbfa"
+  },
+  "sitemapLocation": "sitemap.json"
+}

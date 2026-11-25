@@ -1,0 +1,5 @@
+.money-card { margin-top: 14rpx; padding: 20rpx; border-radius: 14rpx; background: #fff; border: 1rpx solid #dcebe7; }
+.money-title { display: flex; justify-content: space-between; align-items: center; font-size: 25rpx; font-weight: 650; color: #1c443e; }
+.money-meta { margin-top: 5rpx; color: #728c86; font-size: 21rpx; }
+.money-actions { display: flex; gap: 10rpx; margin-top: 12rpx; }
+.money-actions button { flex: 1; font-size: 22rpx; margin: 0; }

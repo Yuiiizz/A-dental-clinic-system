@@ -1,0 +1,17 @@
+.git
+.env
+**/.env
+**/.env.*
+**/node_modules
+**/target
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+**/__pycache__
+deploy/secrets
+deploy/*.env
+*.docx
+docs/screenshots
+DEEPSEEK_*.md
+handoff.md

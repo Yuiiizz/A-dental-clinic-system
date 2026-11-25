@@ -1,0 +1,713 @@
+:root {
+  --clinic-bg: #f7fbfa;
+  --clinic-surface: #ffffff;
+  --clinic-ink: #244f4c;
+  --clinic-muted: #64847f;
+  --clinic-primary: #278e84;
+  --clinic-primary-hover: #20786f;
+  --clinic-line: #dcebe8;
+  --clinic-blue: #e8f3fb;
+  --clinic-warm: #fff1df;
+  --el-color-primary: #278e84;
+  --el-color-primary-light-3: #68b6ae;
+  --el-color-primary-light-9: #edf8f5;
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color: var(--clinic-ink);
+  background: var(--clinic-bg);
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font-family: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #269e87;
+  outline-offset: 2px;
+}
+
+/* Keep the real API workbenches visually aligned with the mini program. */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) {
+  background: var(--clinic-bg);
+  color: var(--clinic-ink);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) {
+  padding: 30px clamp(20px, 3vw, 44px) 60px;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) :is(.panel, .card) {
+  background: #fff;
+  border: 1px solid var(--clinic-line);
+  border-radius: 17px;
+  box-shadow: 0 7px 24px #174c3f0b;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary > div {
+  border: 1px solid var(--clinic-line);
+  border-radius: 17px;
+  padding: 18px;
+  box-shadow: 0 7px 24px #174c3f0b;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) :is(h1, h2) {
+  color: var(--clinic-ink);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) :is(input:not([type="checkbox"]), select, textarea) {
+  border-radius: 9px;
+  border-color: #cfe4dc;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) button {
+  border-radius: 9px;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) button.primary {
+  background: var(--clinic-primary);
+  border-color: var(--clinic-primary);
+  color: #fff;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) button.primary:hover:not(:disabled) {
+  background: var(--clinic-primary-hover);
+  border-color: var(--clinic-primary-hover);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) th {
+  background: #f8fbfa;
+  color: #6c8a81;
+  font-weight: 700;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page, .staff-page, .admin-page, .branches-page) tbody tr:hover {
+  background: #f7fcf9;
+}
+
+@media (max-width: 980px) {
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+    .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+    .supplier-page) .panel,
+  #app .real-panel { overflow-x: auto; }
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+    .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+    .supplier-page) table,
+  #app .real-table-wrap table { min-width: 720px; }
+}
+@media (max-width: 760px) {
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) {
+    padding: 18px 15px 38px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Desktop workspace refresh
+   One visual language for the real API pages: readable type, stronger contrast,
+   calm mint surfaces, clear actions and non-transparent status labels.
+   -------------------------------------------------------------------------- */
+:root {
+  --admin-ink: #173b37;
+  --admin-ink-soft: #345a53;
+  --admin-muted: #5e7a73;
+  --admin-line: #d3e6df;
+  --admin-line-strong: #b9d8ce;
+  --admin-mint: #e9f7f2;
+  --admin-mint-strong: #d5f0e8;
+  --admin-blue: #eaf3fb;
+  --admin-orange: #fff0dd;
+  --admin-orange-ink: #8a5314;
+  --admin-danger: #a33b2b;
+  --admin-radius: 16px;
+  --admin-shadow: 0 10px 30px rgba(23, 70, 59, .07);
+}
+
+html { font-size: 16px; }
+body {
+  margin: 0;
+  color: var(--admin-ink);
+  background: #f2f8f5;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+#app { min-height: 100vh; }
+button, input, select, textarea { font-family: inherit; }
+button { letter-spacing: .01em; white-space: nowrap; }
+
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .home-page) {
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 30px clamp(22px, 3vw, 46px) 64px;
+  color: var(--admin-ink);
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .home-page) header {
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--admin-line);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .home-page) h1 {
+  margin: 5px 0 5px;
+  color: var(--admin-ink);
+  font-size: clamp(25px, 2.2vw, 31px);
+  line-height: 1.2;
+  font-weight: 760;
+  letter-spacing: -.025em;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .home-page) header p {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .home-page) header a { color: #17685d; font-size: 13.5px; font-weight: 650; }
+
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .panel,
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .card {
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: #fff;
+  box-shadow: var(--admin-shadow);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .panel-head { align-items: center; margin-bottom: 16px; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.panel-head h2, .panel h2, .card-title) {
+  margin: 0 0 4px;
+  color: var(--admin-ink);
+  font-size: 19px;
+  line-height: 1.35;
+  font-weight: 720;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.panel-head p, .panel > p, .card-sub, .muted, .hint) {
+  color: var(--admin-muted);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(h3, .panel h3) {
+  color: var(--admin-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Summary metrics */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary {
+  gap: 14px;
+  margin-bottom: 18px;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary > div {
+  min-height: 104px;
+  padding: 18px 20px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid var(--admin-line);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #ffffff, #f1faf6);
+  box-shadow: 0 6px 18px rgba(23, 70, 59, .05);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary span {
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary strong {
+  color: #146254;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 760;
+}
+
+/* Forms: 14px readable controls, visible focus and normal pointer areas */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel) label {
+  color: #31574f;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel) :is(input:not([type="checkbox"]):not([type="radio"]),
+  select, textarea) {
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--admin-ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel) textarea { min-height: 92px; resize: vertical; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel) :is(input, select, textarea):focus {
+  outline: 3px solid rgba(39, 142, 132, .18);
+  outline-offset: 1px;
+  border-color: #258c80;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel) .form-grid { gap: 14px 16px; }
+
+/* Actions */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel, .real-dashboard) button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 9px;
+  background: #fff;
+  color: #1c5e54;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel, .real-dashboard) button:hover:not(:disabled) {
+  background: #e8f7f1;
+  border-color: #8bcbb9;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel, .real-dashboard) :is(button.primary, .primary button) {
+  background: #187d6c;
+  border-color: #187d6c;
+  color: #fff;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel, .real-dashboard) :is(button.primary, .primary button):hover:not(:disabled) {
+  background: #116b5c;
+  border-color: #116b5c;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page, .checkin-panel, .real-dashboard) button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* Tables: no 12px text or low-contrast header */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) th {
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--admin-line-strong);
+  background: #f4faf7;
+  color: #42675f;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) td {
+  padding: 12px;
+  border-bottom: 1px solid #e7f1ed;
+  color: var(--admin-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) tbody tr:hover { background: #f3fbf7; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .table-wrap { overflow-x: auto; border-radius: 10px; }
+
+/* Tags */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.badge, .status, .state, .state-badge, .real-badge, .real-tag, .live-badge, .live-chip, .demo-chip, .tag) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #e8f3ef;
+  color: #315e55;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.badge.good, .status.good, .state.good) { background: #d9f3e6; color: #176143; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.badge.warn, .status.warn, .real-badge, .state.warn, .real-tag, .live-badge) { background: var(--admin-orange); color: var(--admin-orange-ink); }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.badge.bad, .status.bad, .state.bad) { background: #ffe9e3; color: #8f3427; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.error, .notice) {
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .error { background: #fff0ec; color: #933629; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .notice { background: #e5f7ef; color: #1d6351; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .empty { padding: 30px 12px; color: #6d8780; font-size: 13.5px; }
+
+/* Tabs and nested work areas */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .tabs,
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) .mini-tabs { gap: 8px; margin-bottom: 16px; }
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.tabs button, .mini-tabs .tab) {
+  min-height: 38px;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+  .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+  .supplier-page) :is(.reception-box, .checkin-box, .scan-box) {
+  border: 1px solid var(--admin-line);
+  border-radius: 14px;
+  background: #f7fcfa;
+}
+
+/* Workspace shell */
+#app .admin-shell {
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 100vh;
+  background: #f2f8f5;
+  color: var(--admin-ink);
+}
+#app .sidebar {
+  background: linear-gradient(180deg, #f7fcfa 0%, #edf8f5 62%, #eef5fc 100%);
+  color: #25544d;
+  padding: 24px 14px 18px;
+  border-right: 1px solid var(--admin-line);
+  box-shadow: 8px 0 30px rgba(23, 70, 59, .04);
+}
+#app .brand { padding: 0 10px 20px; border-color: var(--admin-line); gap: 12px; }
+#app .brand-mark { width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(145deg, #bceee8, #8ad2ca); color: #18544f; font-size: 23px; }
+#app .brand strong { color: #173d3a; font-size: 18px; font-weight: 760; }
+#app .brand span { color: #587b74; font-size: 12px; margin-top: 4px; }
+#app .nav-group { margin-bottom: 20px; }
+#app .nav-group p { margin: 0 11px 8px; color: #5d7d76; font-size: 11.5px; font-weight: 750; letter-spacing: .12em; }
+#app .nav-group button { min-height: 42px; padding: 10px 12px; margin: 2px 0; border-radius: 10px; color: #345f58; font-size: 14px; font-weight: 600; }
+#app .nav-group button:hover { background: #e2f3ee; color: #164f48; }
+#app .nav-group button.active { background: linear-gradient(90deg, #d2f0e8, #e1f0f8); color: #134f48; box-shadow: inset 3px 0 #2d9b8a; font-weight: 750; }
+#app .nav-group em { min-width: 42px; text-align: center; padding: 3px 7px; background: #dceeea; color: #39675f; font-size: 10px; font-weight: 700; }
+#app .sidebar-foot { border-color: var(--admin-line); padding: 16px 10px 3px; color: #4d716a; font-size: 12.5px; }
+#app .sidebar-foot .link { color: #1b7469; font-weight: 700; }
+#app .content { padding: 32px clamp(24px, 3vw, 48px) 64px; }
+#app .topbar { align-items: center; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--admin-line); }
+#app .topbar h1 { color: var(--admin-ink); font-size: clamp(27px, 2.3vw, 32px); font-weight: 760; letter-spacing: -.025em; }
+#app .topbar p { color: var(--admin-muted); font-size: 14px; margin-top: 7px; }
+#app .demo-chip, #app .live-chip { padding: 8px 12px; font-size: 12px; font-weight: 750; }
+#app .demo-banner, #app .off-banner { padding: 12px 15px; border-radius: 10px; font-size: 13px; line-height: 1.6; }
+#app .demo-banner { background: #fff5e3; border: 1px solid #ecd3a8; color: #7b5217; }
+#app .off-banner { background: #ecf7f4; border: 1px solid #c8e5dc; color: #315f59; }
+#app .metric-grid { gap: 14px; margin-bottom: 18px; }
+#app .metric { min-height: 116px; padding: 20px 22px; border: 1px solid var(--admin-line); border-radius: 15px; box-shadow: var(--admin-shadow); }
+#app .metric span { color: var(--admin-muted); font-size: 13px; font-weight: 650; }
+#app .metric strong { color: #146254; font-size: 34px; line-height: 1.1; font-weight: 780; }
+#app .metric small { color: #617e77; font-size: 12.5px; line-height: 1.45; }
+#app .panel { padding: 22px; border: 1px solid var(--admin-line); border-radius: 15px; box-shadow: var(--admin-shadow); }
+#app .panel h2 { font-size: 18px; font-weight: 740; }
+#app .panel-head p { color: var(--admin-muted); font-size: 12.5px; }
+#app .panel-head button, #app .row-actions button, #app .quick-grid button, #app .module-toolbar button, #app .drawer button, #app .dialog button { min-height: 36px; padding: 8px 11px; font-size: 13px; font-weight: 650; }
+#app .welcome-copy h2 { color: #14574d; font-size: clamp(25px, 2.4vw, 35px); font-weight: 780; }
+#app .welcome-copy p { color: #466f65; font-size: 14.5px; line-height: 1.7; }
+#app .welcome-eyebrow { color: #217b6b; font-size: 11px; }
+#app .welcome-links button { min-height: 40px; padding: 10px 16px; font-size: 13.5px; font-weight: 700; }
+#app .welcome-hero { min-height: 230px; border-radius: 20px; }
+#app .side-panel .list-row { padding: 12px 0; gap: 11px; }
+#app .side-panel .avatar { width: 34px; height: 34px; font-size: 13px; }
+#app .side-panel .list-row strong { font-size: 13.5px; }
+#app .side-panel .list-row p { color: #607b74; font-size: 12.5px; line-height: 1.45; }
+#app .status { min-height: 24px; padding: 3px 9px; font-size: 12px; font-weight: 700; }
+#app .day-col { min-height: 138px; padding: 9px; border-radius: 9px; background: #f5fbf8; border: 1px solid #e4efeb; }
+#app .day-col > span { color: #50756d; font-size: 11.5px; font-weight: 650; }
+#app .day-col button { min-height: 30px; padding: 5px 6px; font-size: 11.5px; line-height: 1.35; }
+#app .day-col small { color: #718b84; font-size: 11.5px; }
+#app .quick-grid { gap: 10px; }
+#app .quick-grid button { min-height: 48px; padding: 12px 10px; font-size: 13.5px; background: #eff9f5; }
+#app .module-toolbar input { min-width: 270px; min-height: 40px; font-size: 14px; }
+#app .result-count { color: #54736b; font-size: 12.5px; }
+#app .module-note, #app .tiny { color: #5c7a72; font-size: 12.5px; line-height: 1.65; }
+#app .only-demo, #app .demo-chip { background: #fff0d8; }
+
+/* Login and password pages */
+#app .auth-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 480px);
+  justify-content: center;
+  align-content: center;
+  place-items: center;
+  padding: 32px 20px;
+  background:
+    radial-gradient(800px 480px at 8% 0%, #e6f8f2 0%, transparent 68%),
+    radial-gradient(700px 500px at 100% 100%, #e9f2fb 0%, transparent 70%),
+    #f4faf7;
+}
+#app .auth-card {
+  width: 100%;
+  max-width: none;
+  padding: 38px 38px 34px;
+  border: 1px solid var(--admin-line);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(23, 70, 59, .13);
+}
+#app .auth-title { color: var(--admin-ink); font-size: 26px; font-weight: 780; letter-spacing: -.02em; white-space: nowrap; }
+#app .auth-subtitle { color: var(--admin-muted); font-size: 14px; margin-bottom: 26px; }
+#app .auth-card .field label { color: #31574f; font-size: 13.5px; font-weight: 650; }
+#app .auth-card .field input { min-height: 44px; font-size: 15px; padding: 10px 13px; }
+#app .auth-card .submit { min-height: 46px; font-size: 15px; font-weight: 750; background: #187d6c; border-color: #187d6c; color: #fff; }
+#app .auth-card::before {
+  content: "A";
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 18px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #bceee8, #87d0c9);
+  color: #18544f;
+  font-size: 27px;
+  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(42, 135, 121, .16);
+}
+#app .auth-card .form-error { font-size: 13.5px; }
+#app .auth-page :is(.verification-text, .notice) { font-size: 13.5px; line-height: 1.6; }
+
+/* Real dashboard */
+#app .real-dashboard { max-width: 1560px; margin: 0 auto; padding: 2px 0 0; gap: 18px; }
+#app .real-intro { min-height: 218px; border-radius: 20px; padding: 30px 36px; box-shadow: 0 12px 34px rgba(34, 90, 78, .09); }
+#app .real-intro h2 { font-size: clamp(27px, 2.5vw, 36px); font-weight: 780; letter-spacing: -.03em; }
+#app .real-intro p { color: #426d62; font-size: 14.5px; line-height: 1.7; }
+#app .real-intro span { color: #1c7c68; font-size: 11px; }
+#app .real-metrics { gap: 14px; }
+#app .real-metrics article { padding: 20px 22px; border: 1px solid var(--admin-line); border-radius: 15px; box-shadow: var(--admin-shadow); }
+#app .real-metrics span { color: var(--admin-muted); font-size: 13px; font-weight: 650; }
+#app .real-metrics strong { color: #146254; font-size: 33px; font-weight: 780; }
+#app .real-metrics small { color: #617e77; font-size: 12.5px; }
+#app .real-panel { padding: 22px; border: 1px solid var(--admin-line); border-radius: 15px; box-shadow: var(--admin-shadow); }
+#app .real-panel h3 { font-size: 18px; font-weight: 740; }
+#app .real-panel-head p { font-size: 12.5px; color: var(--admin-muted); }
+#app .real-table-wrap table { font-size: 14px; }
+#app .real-table-wrap th { font-size: 13px; }
+#app .real-table-wrap th, #app .real-table-wrap td { padding: 12px; }
+#app .real-panel button { min-height: 38px; font-size: 13px; font-weight: 650; }
+#app .real-links button { min-width: 150px; min-height: 42px; font-size: 13.5px; }
+#app .real-empty, #app .real-role-note, #app .real-links p { color: #5d7a73; font-size: 13.5px; }
+
+/* Settings panel used inside store page */
+#app .checkin-panel { padding: 22px 24px; border: 1px solid var(--admin-line); border-radius: var(--admin-radius); box-shadow: var(--admin-shadow); }
+#app .checkin-panel h2 { font-size: 19px; font-weight: 740; }
+#app .checkin-panel .fields { gap: 14px; margin: 16px 0; }
+
+#app .staff-page .topbar,
+#app .admin-page .topbar {
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--admin-line);
+  background: transparent;
+}
+#app .staff-page .topbar h1,
+#app .admin-page .topbar h1 { margin-top: 6px; }
+#app .staff-page .layout { gap: 20px; }
+#app .staff-page .identity { color: var(--admin-muted); font-size: 13px; }
+
+@media (max-width: 1180px) {
+  #app .admin-shell { grid-template-columns: 230px minmax(0, 1fr); }
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #app .dash-grid, #app .dash-grid.lower { grid-template-columns: 1fr; }
+  #app .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  #app .admin-shell { grid-template-columns: 1fr; }
+  #app .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(82vw, 318px);
+    height: 100vh;
+    max-height: none;
+    padding: 20px 14px 18px;
+    overflow: auto;
+    transform: translateX(-102%);
+    transition: transform .22s ease;
+    border-right: 1px solid var(--admin-line);
+    box-shadow: 18px 0 45px rgba(19, 64, 57, .16);
+  }
+  #app .sidebar.open { transform: translateX(0); }
+  #app .content { padding: 18px 14px 42px; }
+  #app .topbar { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding-bottom: 14px; }
+  #app .topbar > div { flex: 1; min-width: 0; }
+  #app .topbar h1 { font-size: 24px; }
+  #app .top-actions { justify-content: flex-start; margin-top: 2px; width: 100%; }
+  #app .nav { display: block; }
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page,
+    .staff-page, .admin-page, .branches-page, .inventory-page, .message-page,
+    .supplier-page, .home-page) { padding: 18px 14px 42px; }
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary { grid-template-columns: 1fr 1fr; }
+  #app .metric-grid { grid-template-columns: 1fr 1fr; }
+  #app .sidebar-foot { margin-top: 0; }
+  #app .panel, #app .real-panel { padding: 18px 16px; }
+  #app .real-intro { padding: 24px; min-height: 210px; }
+  #app .real-intro h2 { font-size: 27px; }
+  #app .real-metrics { grid-template-columns: 1fr; }
+  #app .table-wrap, #app .real-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #app .table-wrap table, #app .real-table-wrap table { min-width: 620px; }
+  #app .table-wrap th, #app .table-wrap td, #app .real-table-wrap th, #app .real-table-wrap td { white-space: normal; overflow-wrap: anywhere; }
+  #app .row-actions, #app .actions { flex-wrap: wrap; }
+}
+@media (max-width: 520px) {
+  #app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary { grid-template-columns: 1fr; }
+  #app .metric-grid { grid-template-columns: 1fr; }
+  #app .auth-card { padding: 28px 22px; }
+  #app .nav { grid-template-columns: 1fr; }
+}
+
+/* Subtle blue/warm accents keep the workbench from reading as one flat mint page. */
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary > div:nth-child(2) {
+  background: linear-gradient(145deg, #ffffff, #edf6fc);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary > div:nth-child(3) {
+  background: linear-gradient(145deg, #ffffff, #fff7ea);
+}
+#app :is(.booking-page, .billing-page, .clinical-page, .plan-page, .scheduling-page) .summary > div:nth-child(4) {
+  background: linear-gradient(145deg, #ffffff, #f5f1fb);
+}
+#app .auth-page {
+  background:
+    url('/dental-hero.png') right bottom / auto 78% no-repeat,
+    radial-gradient(800px 480px at 8% 0%, #e6f8f2 0%, transparent 68%),
+    radial-gradient(700px 500px at 100% 100%, #e9f2fb 0%, transparent 70%),
+    #f4faf7;
+}
+#app .auth-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(244,250,247,.96) 0%, rgba(244,250,247,.82) 42%, rgba(244,250,247,.3) 100%);
+}
+#app .auth-page .auth-card { position: relative; z-index: 1; }
+@media (max-width: 520px) {
+  #app .auth-title { font-size: 23px; white-space: normal; }
+}
+
+#app .admin-page h1 { font-size: 22px; line-height: 1.35; letter-spacing: -.015em; }
+#app .admin-page .panel h2 { font-size: 18px; }
+#app .admin-page .panel { margin-bottom: 18px; }
+#app .admin-page .state-badge { display: inline-flex; min-height: 24px; align-items: center; padding: 3px 9px; border-radius: 999px; background: #e8f3ef; color: #315e55; font-size: 12px; font-weight: 700; }
+#app .admin-page .state-badge[data-state="active"] { background: #d9f3e6; color: #176143; }
+#app .admin-page .state-badge[data-state="pending_activation"] { background: #fff0dd; color: #8a5314; }
+
+/* Small account/profile page: avoid the legacy 640px empty-looking card. */
+#app .home-page { background: transparent; color: var(--admin-ink); }
+#app .home-page .topbar {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--admin-line);
+  background: transparent;
+}
+#app .home-page .brand { display: flex; align-items: center; gap: 10px; color: #1b4b45; font-size: 15px; font-weight: 740; }
+#app .home-page .brand::before {
+  content: "A";
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #bceee8, #8ad2ca);
+  color: #18544f;
+  font-size: 18px;
+  font-weight: 800;
+}
+#app .home-page .topbar-actions a { color: #1a6f63; font-size: 13.5px; font-weight: 650; }
+#app .home-page .accounts-entry,
+#app .home-page .logout { min-height: 38px; padding: 8px 14px; border: 1px solid var(--admin-line-strong); border-radius: 9px; background: #fff; color: #1c5e54; font-size: 13.5px; font-weight: 650; }
+#app .home-page .content { max-width: 920px; margin: 36px auto 64px; padding: 0 24px; }
+#app .home-page .heading { margin: 0 0 20px; color: var(--admin-ink); font-size: clamp(28px, 3vw, 36px); font-weight: 780; letter-spacing: -.03em; }
+#app .home-page .identity-card {
+  position: relative;
+  padding: 28px 30px 30px 92px;
+  border: 1px solid var(--admin-line);
+  border-radius: 18px;
+  background: linear-gradient(145deg, #ffffff, #f4fbf8);
+  box-shadow: var(--admin-shadow);
+  gap: 14px;
+}
+#app .home-page .identity-card::before {
+  content: "A";
+  position: absolute;
+  left: 28px;
+  top: 30px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #d5f0e8;
+  color: #18544f;
+  font-size: 23px;
+  font-weight: 800;
+}
+#app .home-page .identity-row { gap: 22px; align-items: baseline; }
+#app .home-page .identity-row .label { flex: 0 0 5.5rem; color: var(--admin-muted); font-size: 13.5px; font-weight: 650; }
+#app .home-page .identity-row .value { color: var(--admin-ink); font-size: 15px; font-weight: 550; }
+#app .home-page .role-list { display: flex; flex-wrap: wrap; gap: 7px; padding: 0; margin: 0; list-style: none; }
+#app .home-page .role-list li { padding: 5px 9px; border-radius: 999px; background: #e7f5ef; color: #235f53; font-size: 12.5px; }
+#app .home-page .muted { color: var(--admin-muted); font-size: 13.5px; }
+#app .home-page .error { font-size: 13.5px; }
+@media (max-width: 560px) {
+  #app .home-page .topbar { padding: 16px; }
+  #app .home-page .content { margin-top: 24px; padding: 0 16px; }
+  #app .home-page .identity-card { padding: 22px 20px 22px 20px; }
+  #app .home-page .identity-card::before { position: static; margin-bottom: 2px; }
+  #app .home-page .identity-row { display: block; }
+  #app .home-page .identity-row .label { display: block; margin-bottom: 3px; }
+}

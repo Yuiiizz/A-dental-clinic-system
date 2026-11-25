@@ -1,0 +1,44 @@
+<view class="mini-page">
+  <view class="demo-banner">{{demoNotice}}</view>
+  <view wx:if="{{!demoEnabled}}" class="mini-card">
+    <view class="card-title">演示已关闭</view>
+    <view class="mini-muted">关闭演示后不会展示虚构门店、医生、就诊或费用数据。请返回首页开启演示。</view>
+    <button class="mini-btn secondary" bindtap="backHome">返回首页</button>
+  </view>
+  <block wx:if="{{demoEnabled}}">
+  <view class="mini-hero">
+    <view class="eyebrow">就诊与复诊</view>
+    <view class="title">把每一次治疗连起来</view>
+    <view class="sub">复诊优先原主治医生，具体安排以院内确认为准。</view>
+  </view>
+
+  <view class="mini-tabs">
+    <view class="tab {{tab === 'visits' ? 'active' : ''}}" data-tab="visits" bindtap="switchTab">就诊记录</view>
+    <view class="tab {{tab === 'recalls' ? 'active' : ''}}" data-tab="recalls" bindtap="switchTab">复诊计划</view>
+  </view>
+
+  <block wx:if="{{tab === 'visits'}}">
+    <view wx:for="{{visits}}" wx:key="id" class="record-card">
+      <view class="record-title">{{item.date}} · {{item.clinic}}</view>
+      <view class="record-meta">{{item.doctor}} · 诊断摘要：{{item.diagnosis}}</view>
+      <view class="record-body">处置：{{item.items}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <view wx:for="{{recalls}}" wx:key="id" class="record-card">
+      <view class="record-title">{{item.due}} · {{item.doctor}}</view>
+      <view class="record-meta">{{item.reason}}</view>
+      <view class="record-body"><text class="mini-badge {{item.status === '已预约' ? 'good' : 'warn'}}">{{item.status}}</text></view>
+    </view>
+  </block>
+
+  <view class="mini-card">
+    <view class="card-title">说明</view>
+    <view class="mini-muted">以上为演示摘要，不包含完整病历，也不构成医疗建议。真实病历与复诊安排以院内系统为准。</view>
+  </view>
+  <button class="mini-btn secondary" bindtap="goRealRecords">进入真实就诊记录</button>
+  <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+  </block>
+
+  <view class="mini-foot">演示数据 · 未写入后台</view>
+</view>

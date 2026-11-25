@@ -1,0 +1,88 @@
+<view class="mini-page">
+  <block wx:if="{{!showDemo}}">
+  <view class="mini-card">
+    <view class="card-title">{{selectedBranchId ? '本店项目排班' : '按项目看排班'}} <text class="card-caption">诊所后台</text></view>
+    <view wx:if="{{selectedBranchId}}" class="branch-context">{{selectedBranchName || '所选门店'}} · 只看本店</view>
+    <view class="mini-muted">先选项目，再看每天上午、下午由哪位医生出诊。时间为已发布排班，能否预约以实际时段和提交校验为准。</view>
+    <view wx:if="{{!hasPatientSession}}" class="mini-muted">登录后可查看项目排班；下方公开医生名录无需登录。</view>
+    <view wx:if="{{realLoading}}" class="mini-muted">正在读取项目排班…</view>
+    <view wx:if="{{realError}}" class="mini-muted">{{realError}}<button class="mini-btn secondary" bindtap="loadReal">重试</button></view>
+    <view wx:if="{{hasPatientSession && !realLoading && !realError && scheduleServices.length === 0}}" class="mini-muted">{{selectedBranchId ? '本店当前预约窗口内没有可展示的项目排班。' : '当前预约窗口内没有可展示的项目排班。'}}</view>
+    <view wx:if="{{scheduleServices.length > 0}}" class="schedule-board">
+      <scroll-view class="schedule-subjects" scroll-y="true">
+        <view wx:for="{{scheduleServices}}" wx:key="id" class="schedule-subject {{selectedServiceId === item.id ? 'active' : ''}}" data-id="{{item.id}}" bindtap="chooseScheduleService">{{item.name}}</view>
+      </scroll-view>
+      <scroll-view class="schedule-days" scroll-y="true">
+        <view wx:for="{{scheduleDays}}" wx:key="date" class="schedule-day">
+          <view class="schedule-date">{{item.label}}</view>
+          <view wx:if="{{item.fullDay.length === 0}}" class="schedule-period">上午</view>
+          <view wx:if="{{item.fullDay.length === 0 && item.morning.length === 0}}" class="schedule-no-shift">无排班</view>
+          <view wx:for="{{item.morning}}" wx:for-item="shift" wx:key="key" class="schedule-shift">
+            <view class="schedule-time">{{shift.timeRange}}</view><view class="schedule-doctor">{{shift.dentistName}}</view><view class="schedule-branch">{{shift.branchName}}</view>
+            <view class="schedule-status">{{shift.available ? '有可约时段' : '暂无可约时段'}}</view>
+            <button wx:if="{{shift.available}}" class="schedule-book" data-branch="{{shift.branchId}}" bindtap="openReal">选择时段 ›</button>
+          </view>
+          <view wx:if="{{item.fullDay.length === 0}}" class="schedule-period">下午</view>
+          <view wx:if="{{item.fullDay.length === 0 && item.afternoon.length === 0}}" class="schedule-no-shift">无排班</view>
+          <view wx:for="{{item.afternoon}}" wx:for-item="shift" wx:key="key" class="schedule-shift">
+            <view class="schedule-time">{{shift.timeRange}}</view><view class="schedule-doctor">{{shift.dentistName}}</view><view class="schedule-branch">{{shift.branchName}}</view>
+            <view class="schedule-status">{{shift.available ? '有可约时段' : '暂无可约时段'}}</view>
+            <button wx:if="{{shift.available}}" class="schedule-book" data-branch="{{shift.branchId}}" bindtap="openReal">选择时段 ›</button>
+          </view>
+          <view wx:if="{{item.fullDay.length > 0}}" class="schedule-period">全天</view>
+          <view wx:for="{{item.fullDay}}" wx:for-item="shift" wx:key="key" class="schedule-shift">
+            <view class="schedule-time">{{shift.timeRange}}</view><view class="schedule-doctor">{{shift.dentistName}}</view><view class="schedule-branch">{{shift.branchName}}</view>
+            <view class="schedule-status">{{shift.available ? '有可约时段' : '暂无可约时段'}}</view>
+            <button wx:if="{{shift.available}}" class="schedule-book" data-branch="{{shift.branchId}}" bindtap="openReal">选择时段 ›</button>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+    <view class="mini-muted">“暂无可约时段”不等于“已约满”；未返回项目关系的排班不会显示在这里。</view>
+  </view>
+  <view class="mini-card">
+    <view class="card-title">{{selectedBranchId ? '本店医生' : '医生名录'}} <text class="card-caption">诊所后台</text></view>
+    <view class="mini-muted">仅展示已核验资格、在岗且所属门店正在营业的医生；名录不代表某一时段有号源。标有“示例”的人员为虚构资料。</view>
+    <view wx:if="{{directoryLoading}}" class="mini-muted">正在读取医生名录…</view>
+    <view wx:if="{{directoryError}}" class="mini-muted">{{directoryError}}<button class="mini-btn secondary" bindtap="loadDirectory">重试</button></view>
+    <view wx:if="{{directoryEmpty}}" class="mini-muted">{{selectedBranchId ? '本店暂无符合展示条件的医生。' : '暂无符合展示条件的医生。'}}</view>
+    <view wx:if="{{preferenceError}}" class="mini-muted">{{preferenceError}}<button class="mini-btn secondary" bindtap="loadPreferences">刷新收藏</button></view>
+    <view wx:for="{{publicDoctors}}" wx:key="doctor_id" class="doctor-line">
+      <view><view class="doctor-name">{{item.name}} · {{item.job_title}} <text wx:if="{{sharedDoctorId === item.doctor_id}}">· 分享医生</text></view><view class="doctor-meta"><text wx:for="{{item.branches}}" wx:for-item="branch" wx:key="branch_id">{{branch.branch_name}}　</text></view><view wx:if="{{item.public_intro}}" class="doctor-intro">{{item.public_intro}}</view><button class="mini-btn secondary share-doctor" open-type="share" data-id="{{item.doctor_id}}">分享公开信息</button></view>
+      <view wx:if="{{hasPatientSession}}" class="favorite-actions">
+        <text wx:if="{{item.favoriteSource}}" class="doctor-meta">已收藏 · {{item.favoriteSource}}</text>
+        <picker mode="selector" range="{{sourceOptions}}" data-id="{{item.doctor_id}}" bindchange="chooseFavoriteSource" disabled="{{busyDoctorId}}"><text class="mini-link">{{item.favoriteSource ? '修改来源' : '收藏'}} ›</text></picker>
+        <text wx:if="{{item.favoriteSource}}" class="mini-link" data-id="{{item.doctor_id}}" bindtap="removeFavorite">取消</text>
+      </view>
+    </view>
+  </view>
+  </block>
+  <block wx:if="{{showDemo}}">
+  <view class="demo-banner">{{demoNotice}}</view>
+  <view class="mini-hero">
+    <view class="eyebrow">医生团队</view>
+    <view class="title">按专长与排班选择医生</view>
+    <view class="sub">复诊优先原主治；如需临时替诊，会先征得您的同意。</view>
+  </view>
+
+  <view wx:for="{{doctors}}" wx:key="id" class="doctor-card">
+    <view class="doctor-head">
+      <view>
+        <view class="doctor-title">{{item.name}} · {{item.title}}</view>
+        <view class="doctor-sub">{{item.clinic}} · {{item.specialties}}</view>
+      </view>
+      <text class="mini-badge good">可预约</text>
+    </view>
+    <view class="doctor-intro">{{item.intro}}</view>
+    <view class="tag-row">
+      <text wx:for="{{item.schedule}}" wx:key="*this" class="mini-chip">{{item}}</text>
+    </view>
+    <button class="mini-btn secondary" data-id="{{item.id}}" bindtap="open">选择该医生预约</button>
+  </view>
+
+  <button class="mini-btn secondary" bindtap="switchToRealMode">切换到真实模式</button>
+  <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+  </block>
+
+  <view wx:if="{{showDemo}}" class="mini-foot">本地演示医生及排班未写入后台</view>
+</view>

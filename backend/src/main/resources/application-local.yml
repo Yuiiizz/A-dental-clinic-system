@@ -1,0 +1,22 @@
+# local（本地开发）profile —— 与 test 使用不同数据库。
+# 允许本地模拟微信身份与合成数据初始化，便于无真实 AppID 时开发；不得用于生产。
+
+spring:
+  datasource:
+    # 本地开发库占位；真实账号密码经 deploy/env.example 注入，不落库到仓库。
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/a_dental_dev}
+    username: ${DB_USERNAME:a_dental_dev}
+    password: ${DB_PASSWORD:}
+
+app:
+  checkin:
+    # 仅 local 合成演示使用；production 必须经 CHECKIN_SIGNING_KEY 注入独立随机密钥。
+    signing-key: ${CHECKIN_SIGNING_KEY:bG9jYWwtZGVtby1jaGVja2luLXNpZ25pbmcta2V5LTEyMzQ1Ng==}
+  mock:
+    wechat-enabled: ${MOCK_WECHAT_ENABLED:true}
+  seed:
+    enabled: ${APP_SEED_ENABLED:true}
+
+logging:
+  level:
+    cn.dental: debug

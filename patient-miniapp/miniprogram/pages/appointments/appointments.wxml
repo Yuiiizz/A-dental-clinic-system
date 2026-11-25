@@ -1,0 +1,59 @@
+<view class="mini-page">
+  <view class="demo-banner">{{demoNotice}}</view>
+  <view class="mini-hero">
+    <view class="eyebrow">我的预约</view>
+    <view class="title">预约详情与改约</view>
+    <view class="sub">取消或改约只影响本次小程序运行中的演示状态。</view>
+  </view>
+
+  <view wx:if="{{!demoEnabled}}" class="mini-card">
+    <view class="card-title">演示已关闭</view>
+    <view class="mini-muted">关闭演示后不会展示预约样例。请返回首页开启演示。</view>
+    <button class="mini-btn secondary" bindtap="backHome">返回首页</button>
+  </view>
+
+  <block wx:else>
+    <view class="mini-tabs">
+      <view class="tab {{tab === 'upcoming' ? 'active' : ''}}" data-tab="upcoming" bindtap="switchTab">待就诊</view>
+      <view class="tab {{tab === 'history' ? 'active' : ''}}" data-tab="history" bindtap="switchTab">历史</view>
+    </view>
+
+    <view wx:if="{{message}}" class="message">{{message}}</view>
+
+    <block wx:for="{{appointments}}" wx:key="id">
+      <view wx:if="{{(tab === 'upcoming' && item.status !== '已完成' && item.status !== '已取消（演示）') || (tab === 'history' && (item.status === '已完成' || item.status === '已取消（演示）'))}}" class="appt-card {{selectedId === item.id ? 'selected' : ''}}">
+        <view class="appt-head" data-id="{{item.id}}" bindtap="choose">
+          <view>
+            <view class="appt-title">{{item.date}} {{item.time}} · {{item.item}}</view>
+            <view class="appt-meta">{{item.clinic}} · {{item.doctor}} · {{item.source}} · {{item.id}}</view>
+          </view>
+          <text class="mini-badge {{item.status === '已确认' ? 'good' : 'warn'}}">{{item.status}}</text>
+        </view>
+        <view wx:if="{{selectedId === item.id}}" class="appt-actions">
+          <button class="mini-btn secondary" data-id="{{item.id}}" bindtap="startReschedule" disabled="{{item.status === '已取消' || item.status === '已取消（演示）' || item.status === '已完成'}}">改约</button>
+          <button class="mini-btn ghost" data-id="{{item.id}}" bindtap="cancel" disabled="{{item.status === '已取消' || item.status === '已取消（演示）' || item.status === '已完成'}}">取消预约</button>
+        </view>
+        <view wx:if="{{reschedulingId === item.id}}" class="reschedule-box">
+          <view class="mini-muted">选择新的时段；确认后更新同一条预约。</view>
+          <view class="pick-grid">
+            <view wx:for="{{slots}}" wx:key="*this" class="pick slot {{rescheduleSlot === item ? 'active' : ''}}" data-value="{{item}}" bindtap="pickRescheduleSlot">{{item}}</view>
+          </view>
+          <view class="mini-actions">
+            <button class="mini-btn ghost" bindtap="closeReschedule">取消改约</button>
+            <button class="mini-btn secondary" bindtap="confirmReschedule">确认改约</button>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <view class="mini-card">
+      <view class="card-title">预约规则</view>
+      <view class="mini-muted">已取消或已完成的预约不能继续改约或取消。改约需要选择新时段并确认，不能只显示“待改约”。演示数据只在小程序本次运行期间一致，刷新/重启后重置。</view>
+    </view>
+  </block>
+
+  <button class="mini-btn" bindtap="openBooking">新演示预约</button>
+  <button class="mini-btn secondary" bindtap="goRealBooking">去预约挂号</button>
+  <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+  <view class="mini-foot">演示数据 · 未写入后台</view>
+</view>

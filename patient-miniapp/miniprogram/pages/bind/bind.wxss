@@ -1,0 +1,95 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 28rpx 56rpx;
+  background: #f7fbfa;
+  box-sizing: border-box;
+}
+
+.header {
+  padding: 16rpx 8rpx 20rpx;
+}
+
+.title {
+  font-size: 42rpx;
+  font-weight: 600;
+  color: #1f3b3a;
+}
+
+.subtitle {
+  margin-top: 8rpx;
+  font-size: 25rpx;
+  color: #6b8583;
+}
+
+.card {
+  margin-top: 20rpx;
+  padding: 28rpx;
+  background: #ffffff;
+  border: 1rpx solid #dcebe9;
+  border-radius: 16rpx;
+}
+
+.field {
+  margin-bottom: 24rpx;
+}
+
+.label {
+  margin-bottom: 10rpx;
+  font-size: 27rpx;
+  color: #3d5a58;
+}
+
+.input {
+  width: 100%;
+  padding: 18rpx 20rpx;
+  font-size: 28rpx;
+  color: #1f3b3a;
+  background: #fbfefe;
+  border: 1rpx solid #cfe4e1;
+  border-radius: 10rpx;
+  box-sizing: border-box;
+}
+
+.notice {
+  margin: 8rpx 0 20rpx;
+  padding: 18rpx 20rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+  color: #6b6b4a;
+  background: #fffdf5;
+  border: 1rpx solid #eee4c8;
+  border-radius: 10rpx;
+}
+
+.message {
+  color: #8a5a12;
+  background: #fff8e8;
+  border-color: #f2dfb6;
+}
+
+.primary,
+.secondary {
+  margin-top: 20rpx;
+  border-radius: 12rpx;
+  font-size: 29rpx;
+}
+
+.primary {
+  color: #ffffff;
+  background: #2f9e9a;
+  border: 1rpx solid #2f9e9a;
+}
+
+.secondary {
+  color: #1f7f79;
+  background: #ffffff;
+  border: 1rpx solid #b9dcd8;
+}
+
+.back {
+  margin-top: 28rpx;
+}
+
+button::after {
+  border: none;
+}

@@ -1,0 +1,14 @@
+.step-title { font-size: 23rpx; color: #5d7b75; margin-top: 20rpx; }
+.pick-grid { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
+.pick { padding: 12rpx 14rpx; border-radius: 10rpx; background: #f0f7f4; color: #3c6b62; font-size: 23rpx; border: 1rpx solid #dbeae6; }
+.pick.active { background: #278e84; color: #fff; border-color: #278e84; }
+.slot { min-width: 104rpx; text-align: center; }
+.doctor-note { margin-top: 10rpx; padding: 14rpx; background: #eef8f5; border-radius: 10rpx; color: #3f6f65; font-size: 21rpx; line-height: 1.55; }
+.consent { margin-top: 16rpx; display: flex; gap: 10rpx; align-items: start; color: #4d6c65; font-size: 22rpx; line-height: 1.55; }
+.consent .box { width: 28rpx; height: 28rpx; border: 2rpx solid #8cb5ac; border-radius: 6rpx; flex: 0 0 auto; margin-top: 2rpx; text-align: center; line-height: 26rpx; color: #fff; font-size: 20rpx; }
+.consent .box.on { background: #278e84; border-color: #278e84; }
+.success { margin-top: 16rpx; padding: 16rpx; border-radius: 12rpx; background: #e4f7ef; color: #1c664f; font-size: 23rpx; line-height: 1.55; }
+.mini-actions { display: flex; gap: 10rpx; margin-top: 8rpx; }
+.mini-actions button { flex: 1; margin: 0; }
+.substitute-card { border-color: #e4c98f; background: #fffbf1; }
+.substitute-message { margin-top: 12rpx; padding: 13rpx 16rpx; border-radius: 10rpx; background: #eef7f4; color: #416d64; font-size: 22rpx; line-height: 1.55; }

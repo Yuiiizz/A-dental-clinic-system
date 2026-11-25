@@ -1,0 +1,123 @@
+<view class="mini-page">
+  <view class="mini-hero">
+    <image class="hero-art" src="/assets/dental-hero.jpg" mode="aspectFill" />
+    <view class="hero-shade"></view>
+    <view class="hero-content">
+    <view class="hero-line">
+      <text class="eyebrow">A口腔诊所 · 用户服务</text>
+      <text class="login-link" wx:if="{{showDemo}}" bindtap="switchToReal">退出演示 ›</text>
+      <text class="login-link" wx:elif="{{hasPatientSession}}" bindtap="goProfile">个人中心 ›</text>
+      <text class="login-link" wx:else bindtap="goLogin">登录/建档</text>
+    </view>
+    <view class="title">看牙，从一次安心的预约开始</view>
+    <view class="sub">选门店 · 看医生排班 · 预约适合你的时段</view>
+    <view class="hero-note">从初诊到复诊，每一步都清楚安排</view>
+    </view>
+  </view>
+
+  <view class="mode-switch" aria-label="真实模式与演示模式切换">
+    <view class="mode-pill {{!showDemo ? 'active' : ''}}" bindtap="switchToReal">真实模式</view>
+    <view class="mode-pill demo {{showDemo ? 'active' : ''}}" bindtap="switchToDemo">演示模式</view>
+  </view>
+  <view class="mode-note {{showDemo ? 'mode-note-demo' : ''}}">
+    {{showDemo ? '演示模式：下面的预约和记录都是虚构样例，不读取或写入后台。' : '真实模式：门店和医生来自公开目录；预约、记录、费用需要登录或本人建档。'}}
+  </view>
+
+  <block wx:if="{{!showDemo}}">
+    <view class="next-step">
+      <view class="next-step-copy">
+        <view class="next-step-title">{{hasPatientSession ? '下一步：选择门店或医生' : '第一次使用？'}}</view>
+        <view class="next-step-sub">{{hasPatientSession ? '查看医生排班，选择适合你的时段。' : '先登录或本人建档，才能提交预约。'}}</view>
+      </view>
+      <button class="mini-btn next-step-btn" bindtap="{{hasPatientSession ? 'goDoctors' : 'goLogin'}}">{{hasPatientSession ? '看可约医生' : '登录 / 建档'}}</button>
+    </view>
+
+    <view class="mini-card real-services">
+      <view class="card-title">我的服务 <text class="card-caption">诊所后台</text></view>
+      <view class="mini-grid">
+        <view class="quick-item" bindtap="goClinics"><view class="quick-icon icon-clinics"><image class="quick-icon-img" src="/assets/icons/clinic.png" mode="aspectFit" /></view><view class="q-title">门店</view><view class="real-mark">公开资料</view></view>
+        <view class="quick-item" bindtap="goDoctors"><view class="quick-icon icon-doctors"><image class="quick-icon-img" src="/assets/icons/doctor.png" mode="aspectFit" /></view><view class="q-title">按项目看排班</view><view class="real-mark">排班需登录</view></view>
+        <view class="quick-item" bindtap="goBookingFlow"><view class="quick-icon"><image class="quick-icon-img" src="/assets/icons/booking.png" mode="aspectFit" /></view><view class="q-title">预约挂号</view><view class="real-mark">{{hasPatientSession ? '选择时段' : '先选门店'}}</view></view>
+        <view class="quick-item" bindtap="goMyAppointments"><view class="quick-icon icon-appointments"><image class="quick-icon-img" src="/assets/icons/appointments.png" mode="aspectFit" /></view><view class="q-title">我的预约</view><view class="real-mark">{{hasPatientSession ? '查看 · 改约' : '需登录'}}</view></view>
+        <view class="quick-item" bindtap="goRealRecords"><view class="quick-icon icon-records"><image class="quick-icon-img" src="/assets/icons/records.png" mode="aspectFit" /></view><view class="q-title">就诊与复诊</view><view class="real-mark">{{hasPatientSession ? '查看记录' : '需登录'}}</view></view>
+        <view class="quick-item" bindtap="goPayments"><view class="quick-icon icon-payments"><image class="quick-icon-img" src="/assets/icons/payments.png" mode="aspectFit" /></view><view class="q-title">费用与发票</view><view class="real-mark">{{hasPatientSession ? '本人记录' : '需登录'}}</view></view>
+        <view class="quick-item" bindtap="goProfile"><view class="quick-icon icon-profile"><image class="quick-icon-img" src="/assets/icons/profile.png" mode="aspectFit" /></view><view class="q-title">个人信息</view><view class="real-mark">{{hasPatientSession ? '本人资料' : '需登录'}}</view></view>
+      </view>
+      <view class="mini-muted">门店、医生可先浏览；其余项目登录后从后台读回。</view>
+    </view>
+
+    <view class="mini-card">
+      <view class="card-title">门店与医生 <text class="card-caption">后台公开资料</text></view>
+      <view wx:if="{{directoryLoading}}" class="mini-muted">正在读取门店与医生名录…</view>
+      <view wx:if="{{directoryError}}" class="mini-muted">{{directoryError}}<button class="mini-btn secondary" bindtap="loadPublicDirectory">重试</button></view>
+      <view wx:if="{{!directoryLoading && !directoryError && publicBranches.length === 0}}" class="mini-muted">暂无已核验营业门店。</view>
+      <view wx:if="{{publicBranches.length > 0}}" class="doctor-line" bindtap="goClinics">
+        <view><view class="doctor-name">{{publicBranches[0].name}} <text class="mini-badge good">营业</text></view><view class="doctor-meta">{{publicBranches[0].address}} · {{publicBranches[0].opening_hours}}</view></view>
+        <text class="mini-link">全部门店 ›</text>
+      </view>
+      <view wx:if="{{publicDoctors.length > 0}}" class="doctor-line" bindtap="goDoctors">
+        <view><view class="doctor-name">{{publicDoctors[0].name}} · {{publicDoctors[0].job_title}}</view><view class="doctor-meta">{{publicDoctors.length}} 位公开医生 · 排班以后台发布为准</view></view>
+        <text class="mini-link">查看医生 ›</text>
+      </view>
+      <view class="mini-actions">
+        <button class="mini-btn secondary" bindtap="goClinics">门店详情</button>
+        <button class="mini-btn ghost" bindtap="goDoctors">医生与排班</button>
+      </view>
+    </view>
+
+    <view wx:if="{{hasPatientSession}}" class="mini-card">
+      <view class="card-title">我的下一次就诊 <text class="card-caption">后台实时记录</text></view>
+      <view wx:if="{{realLoading}}" class="mini-muted">正在读取预约…</view>
+      <view wx:if="{{realError}}" class="mini-muted">{{realError}}<button class="mini-btn secondary" bindtap="loadRealHome">重试</button></view>
+      <view wx:if="{{realNext}}">
+        <view class="doctor-name">{{realNext.display}}</view>
+        <view class="doctor-meta">{{realNext.branch}} · {{realNext.dentist}} · <text class="mini-badge {{realNext.state === '已确认' ? 'good' : 'warn'}}">{{realNext.state}}</text></view>
+        <view class="mini-muted">当前有效预约 {{realUpcomingCount}} 条；详情、改约和签到请进入我的预约。</view>
+        <button class="mini-btn secondary" bindtap="goMyAppointments">查看我的预约</button>
+      </view>
+      <view wx:if="{{!realLoading && !realError && !realNext}}" class="mini-muted">当前没有有效预约。<button class="mini-btn secondary" bindtap="goBookingFlow">去预约挂号</button></view>
+    </view>
+
+    <view wx:if="{{hasPatientSession}}" class="mini-card change-summary">
+      <view class="card-title">预约协调动态 <text class="card-caption">后台实时状态</text></view>
+      <view wx:if="{{changeLoading}}" class="mini-muted">正在读取协调方案…</view>
+      <view wx:if="{{changeError}}" class="mini-muted">{{changeError}}<button class="mini-btn ghost" bindtap="loadChangeSummary">重试</button></view>
+      <view wx:if="{{changeSummary}}">
+        <view wx:if="{{changeSummary.pendingCount > 0}}" class="change-state">待您答复</view>
+        <view wx:else class="change-state">最近方案：{{changeSummary.state}}</view>
+        <view class="mini-muted">{{changeSummary.reason}}</view>
+        <view wx:if="{{changeSummary.pendingCount > 1}}" class="mini-muted">另有 {{changeSummary.pendingCount - 1}} 项待答复。</view>
+        <button class="mini-btn secondary" bindtap="goRealBooking">查看方案与预约</button>
+      </view>
+      <view wx:if="{{!changeLoading && !changeError && !changeSummary}}" class="mini-muted">暂无预约协调方案。</view>
+      <view class="mini-muted">打开页面时查询真实状态；不是微信推送、送达回执或患者同意。</view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="demo-banner demo-banner-strong">
+      <view><text class="demo-dot"></text><text class="demo-banner-title">演示模式</text> · 虚构样例／不写入后台</view>
+      <text class="demo-banner-sub">这里的预约、医生和记录都不是真实数据；不会提交预约、占用号源或发起支付。</text>
+    </view>
+
+    <view class="mini-card demo-panel">
+      <view class="card-title">测试演示入口 <text class="card-caption">仅用于课堂/测试</text></view>
+      <view class="demo-choice" data-key="appointments" bindtap="openDemo">
+        <view class="demo-choice-icon"><image class="demo-choice-img" src="/assets/icons/booking.png" mode="aspectFit" /></view>
+        <view class="demo-choice-copy"><view class="demo-choice-title">演示预约流程</view><view class="demo-choice-sub">选项目、医生和时段；提交后只生成演示编号</view></view>
+        <text class="mini-link">进入 ›</text>
+      </view>
+      <view class="demo-choice" data-key="records" bindtap="openDemo">
+        <view class="demo-choice-icon"><image class="demo-choice-img" src="/assets/icons/records.png" mode="aspectFit" /></view>
+        <view class="demo-choice-copy"><view class="demo-choice-title">演示就诊记录</view><view class="demo-choice-sub">查看虚构病历和复诊样例</view></view>
+        <text class="mini-link">进入 ›</text>
+      </view>
+      <view class="demo-boundary">演示内容仅供试看，不会提交预约，也不能当作就诊凭证。</view>
+      <button class="mini-btn secondary" bindtap="switchToReal">切换到真实模式</button>
+    </view>
+    <view class="mini-foot">演示数据只在小程序本次运行期间一致，刷新/重启后重置。</view>
+  </block>
+
+  <view wx:if="{{!showDemo}}" class="bottom-nav"><view class="nav-item active"><image class="nav-icon" src="/assets/icons/home.png" mode="aspectFit" /><text>首页</text></view><view class="nav-item" bindtap="goClinics"><image class="nav-icon" src="/assets/icons/clinic.png" mode="aspectFit" /><text>诊所介绍</text></view><view class="nav-item" bindtap="goProfile"><image class="nav-icon" src="/assets/icons/profile.png" mode="aspectFit" /><text>个人中心</text></view></view>
+  <view wx:else class="bottom-nav"><view class="nav-item active"><image class="nav-icon" src="/assets/icons/home.png" mode="aspectFit" /><text>演示首页</text></view><view class="nav-item" bindtap="switchToReal"><image class="nav-icon" src="/assets/icons/real-mode.png" mode="aspectFit" /><text>真实模式</text></view></view>
+</view>

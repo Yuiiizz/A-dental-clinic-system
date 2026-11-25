@@ -1,0 +1,24 @@
+# Public-IP HTTPS uses Let's Encrypt's short-lived IP certificate profile.
+# This path must be validated on the actual public IP before sharing a teacher link.
+{
+  # IP-literal browsers and curl may omit SNI; select the managed IP certificate.
+  default_sni {$SITE_ADDRESS}
+}
+
+{$SITE_ADDRESS} {
+  tls {
+    issuer acme {
+      dir https://acme-v02.api.letsencrypt.org/directory
+      profile shortlived
+    }
+  }
+  encode gzip zstd
+  handle /api/* {
+    reverse_proxy api:8080
+  }
+  handle {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
+}

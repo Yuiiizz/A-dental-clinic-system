@@ -1,0 +1,14 @@
+FROM node:24-alpine AS build
+ARG CLASSROOM_DEMO=false
+ENV VITE_CLASSROOM_DEMO=${CLASSROOM_DEMO}
+WORKDIR /build
+COPY admin-web/package.json admin-web/package-lock.json ./
+RUN npm ci
+COPY admin-web/ ./
+RUN npm run build
+
+FROM caddy:2.11.9-alpine
+ARG CADDYFILE=deploy/Caddyfile
+COPY ${CADDYFILE} /etc/caddy/Caddyfile
+COPY --from=build /build/dist /srv
+EXPOSE 80 443

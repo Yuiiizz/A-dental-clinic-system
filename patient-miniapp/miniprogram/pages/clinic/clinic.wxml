@@ -1,0 +1,68 @@
+<view class="mini-page">
+  <block wx:if="{{!showDemo}}">
+  <view class="mini-card public-directory">
+    <view class="card-title">门店详情 <text class="card-caption">诊所后台</text></view>
+    <view class="mini-muted">查看门店地址、营业时间和医生出诊安排。</view>
+    <view wx:if="{{directoryLoading}}" class="mini-muted">正在读取门店…</view>
+    <view wx:if="{{directoryError}}" class="mini-muted">{{directoryError}}<button class="mini-btn secondary" bindtap="loadDirectory">重试</button></view>
+    <view wx:if="{{directoryEmpty}}" class="mini-muted">暂无已核验营业门店。</view>
+    <view wx:if="{{publicBranches.length > 0}}" class="public-picks">
+      <view wx:for="{{publicBranches}}" wx:key="branch_id" class="public-pick {{publicSelected.branch_id === item.branch_id ? 'active' : ''}}" data-id="{{item.branch_id}}" bindtap="choosePublic">{{item.name}}</view>
+    </view>
+    <view wx:if="{{publicSelected}}">
+      <view class="branch-heading">{{publicSelected.name}}</view>
+      <view class="intro-panel">
+        <view class="intro-heading">门店介绍</view>
+        <view class="intro-copy">{{publicSelected.public_intro || '门店介绍正在完善。'}}</view>
+      </view>
+      <view class="mini-row"><text class="label">地址</text><text class="value">{{publicSelected.address}}</text></view>
+      <view class="mini-row"><text class="label">电话</text><text class="value">{{publicSelected.phone}}</text></view>
+      <view class="mini-row"><text class="label">营业说明</text><text class="value">{{publicSelected.opening_hours}}</text></view>
+      <view class="mini-muted">医生实际出诊和可约时段以已发布排班为准。</view>
+      <button class="mini-btn secondary" bindtap="openDoctors">查看本店医生与排班</button>
+      <button class="mini-btn" bindtap="openRealBooking">{{hasPatientSession ? '预约挂号' : '登录后预约'}}</button>
+    </view>
+  </view>
+  </block>
+  <block wx:if="{{showDemo}}">
+  <view class="demo-banner">{{demoNotice}}</view>
+  <view class="mini-hero clinic-hero"><image class="clinic-art" src="/assets/dental-hero.jpg" mode="aspectFill" /><view class="clinic-hero-shade"></view><view class="clinic-hero-text">
+    <view class="eyebrow">门店详情</view>
+    <view class="title">{{selected.name}}</view>
+    <view class="sub">{{selected.area}} · {{selected.address}}</view>
+  </view></view>
+
+  <view class="mini-card intro-card">
+    <view class="card-title">关于 A 口腔</view>
+    <view class="mini-muted intro-copy">这是课程项目中的诊所信息展示页。患者可在这里查看门店位置、营业时间和服务方向，再了解医生排班，选择适合自己的就诊时段。实际门店资料将在正式接入后由诊所维护。</view>
+    <view class="intro-features"><view bindtap="openDoctors"><text class="feature-symbol">▦</text><text>查看排班</text></view><view bindtap="openDoctors"><text class="feature-symbol">✚</text><text>了解医生</text></view><view bindtap="openRecords"><text class="feature-symbol">◷</text><text>复诊计划</text></view></view>
+  </view>
+  <view class="mini-card clinic-pick">
+    <view wx:for="{{clinics}}" wx:key="id" class="pick {{selected.id === item.id ? 'active' : ''}}" data-id="{{item.id}}" bindtap="choose">{{item.name}}</view>
+  </view>
+
+  <view class="mini-card">
+    <view class="card-title">到院信息</view>
+    <view class="mini-muted intro-copy">{{selected.intro}}</view>
+    <view class="mini-row"><text class="label">地址</text><text class="value">{{selected.address}}</text></view>
+    <view class="mini-row"><text class="label">电话</text><text class="value">{{selected.phone}}</text></view>
+    <view class="mini-row"><text class="label">营业时间</text><text class="value">{{selected.hours}}</text></view>
+    <view class="tag-row"><text wx:for="{{selected.tags}}" wx:key="*this" class="mini-chip">{{item}}</text></view>
+  </view>
+
+  <view class="mini-card">
+    <view class="card-title">就诊提示</view>
+    <view class="mini-muted">请提前 10 分钟到院；复诊优先原主治医生。若需要临时替诊，会先征得您的同意。</view>
+    <view class="mini-muted">本页为演示门店，电话和地址均为虚构样例。</view>
+  </view>
+
+  <button class="mini-btn" bindtap="openDoctors">查看医生与排班</button>
+  <button class="mini-btn secondary" bindtap="openBooking">选择项目与时段</button>
+  <button class="mini-btn ghost" bindtap="switchToRealMode">切换到真实模式</button>
+  <button class="mini-btn ghost" bindtap="backHome">返回首页</button>
+  </block>
+
+  <view wx:if="{{showDemo}}" class="mini-foot">上方为后台门店资料；本地演示内容未写入后台</view>
+  <view wx:if="{{!showDemo}}" class="bottom-nav"><view class="nav-item" bindtap="backHome"><image class="nav-icon" src="/assets/icons/home.png" mode="aspectFit" /><text>首页</text></view><view class="nav-item active"><image class="nav-icon" src="/assets/icons/clinic.png" mode="aspectFit" /><text>诊所介绍</text></view><view class="nav-item" bindtap="openProfile"><image class="nav-icon" src="/assets/icons/profile.png" mode="aspectFit" /><text>个人中心</text></view></view>
+  <view wx:else class="bottom-nav"><view class="nav-item" bindtap="backHome"><image class="nav-icon" src="/assets/icons/home.png" mode="aspectFit" /><text>演示首页</text></view><view class="nav-item" bindtap="switchToRealMode"><image class="nav-icon" src="/assets/icons/real-mode.png" mode="aspectFit" /><text>真实模式</text></view></view>
+</view>

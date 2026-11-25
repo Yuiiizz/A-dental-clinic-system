@@ -1,0 +1,83 @@
+<view class="page">
+  <view class="header">
+    <view class="eyebrow">首次就诊 · 本人建档</view>
+    <view class="title">完善本人信息</view>
+    <view class="subtitle">用于诊所核对身份和联系。带 <text class="required">*</text> 的项必填，提交前可随时修改。</view>
+  </view>
+
+  <view wx:if="{{showForm}}" class="form">
+    <view class="section">
+      <view class="section-title">基本信息</view>
+      <view class="section-hint">请填写就诊者本人的姓名和电话，不要填写他人的资料。</view>
+
+      <view class="field">
+        <view class="field-head"><text class="label">姓名</text><text class="required">*</text></view>
+        <view class="control {{focusedField === 'name' ? 'focused' : ''}} {{fieldErrors.name ? 'has-error' : ''}}">
+          <input class="input" value="{{name}}" maxlength="60" placeholder="请输入本人姓名" placeholder-class="placeholder" bindinput="onNameInput" bindfocus="onFieldFocus" bindblur="onFieldBlur" data-field="name" adjust-position="{{true}}" cursor-spacing="24" />
+        </view>
+        <view wx:if="{{fieldErrors.name}}" class="field-error">{{fieldErrors.name}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-head"><text class="label">手机号</text><text class="required">*</text></view>
+        <view class="control {{focusedField === 'phone' ? 'focused' : ''}} {{fieldErrors.phone ? 'has-error' : ''}}">
+          <input class="input" value="{{phone}}" maxlength="30" type="number" placeholder="请输入本人联系电话" placeholder-class="placeholder" bindinput="onPhoneInput" bindfocus="onFieldFocus" bindblur="onFieldBlur" data-field="phone" adjust-position="{{true}}" cursor-spacing="24" />
+        </view>
+        <view wx:if="{{fieldErrors.phone}}" class="field-error">{{fieldErrors.phone}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-head"><text class="label">出生日期</text><text class="optional">选填</text></view>
+        <picker mode="date" start="1900-01-01" end="2100-12-31" value="{{birthDate}}" bindchange="onBirthChange">
+          <view class="control picker-control {{birthDate ? '' : 'placeholder'}}">
+            <text>{{birthDate || '请选择出生日期'}}</text>
+            <text class="chevron">›</text>
+          </view>
+        </picker>
+        <view class="field-hint">用于核对身份，不会自动认领旧档。</view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">健康信息</view>
+      <view class="section-hint">如实填写有助于医生在接诊前了解风险；不确定时请选择“不确定”并说明。</view>
+
+      <view class="field">
+        <view class="field-head"><text class="label">过敏申报</text><text class="required">*</text></view>
+        <picker mode="selector" range="{{allergyOptions}}" value="{{allergyIndex}}" bindchange="onAllergyChange">
+          <view class="control picker-control">
+            <text>{{allergyOptions[allergyIndex]}}</text>
+            <text class="chevron">›</text>
+          </view>
+        </picker>
+      </view>
+
+      <view class="field">
+        <view class="field-head"><text class="label">过敏说明</text><text wx:if="{{notesRequired}}" class="required">*</text><text wx:else class="optional">选填</text></view>
+        <view class="control textarea-control {{focusedField === 'notes' ? 'focused' : ''}} {{fieldErrors.allergyNotes ? 'has-error' : ''}}">
+          <textarea class="textarea" value="{{allergyNotes}}" maxlength="300" placeholder="{{notesRequired ? '请填写过敏药物、食物或材料；不确定时请说明' : '如有过敏史，请填写过敏药物、食物或材料'}}" placeholder-class="placeholder" bindinput="onNotesInput" bindfocus="onFieldFocus" bindblur="onFieldBlur" data-field="notes" adjust-position="{{true}}" cursor-spacing="28" show-confirm-bar="{{true}}" />
+        </view>
+        <view class="field-meta"><text wx:if="{{fieldErrors.allergyNotes}}" class="field-error">{{fieldErrors.allergyNotes}}</text><text class="char-count">{{allergyNotes.length}} / 300</text></view>
+      </view>
+    </view>
+
+    <view class="privacy-note">
+      <view class="privacy-title">关于旧档</view>
+      建档只创建本人的新档案，不自动认领任何旧档；手机号相同也不等于本人。已有旧档时，请使用前台当面核验后交付的绑定凭证。
+    </view>
+
+    <view wx:if="{{message}}" class="notice message">{{message}}</view>
+
+    <button class="primary" bindtap="handleSubmit" disabled="{{busy || !canSubmit}}">
+      {{busy ? '提交中…' : '提交本人建档'}}
+    </button>
+    <view class="submit-hint">提交前请确认姓名、电话和过敏信息；提交后可在个人中心补充。</view>
+  </view>
+
+  <view wx:if="{{!showForm && message}}" class="notice message">{{message}}</view>
+
+  <button wx:if="{{showRecheck}}" class="secondary" bindtap="handleRecheck" disabled="{{busy}}">重新微信登录/核验</button>
+  <button wx:if="{{showLogin}}" class="primary" bindtap="goLogin" disabled="{{busy}}">返回登录</button>
+
+  <button class="secondary back" bindtap="goBack" disabled="{{busy}}">返回</button>
+</view>

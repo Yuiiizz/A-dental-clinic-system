@@ -1,0 +1,14 @@
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
+COPY backend/pom.xml ./pom.xml
+COPY backend/src ./src
+RUN mvn -q -Dmaven.test.skip=true package
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=postgres:18.6 /usr/local/bin/gosu /usr/local/bin/gosu
+COPY --from=build /build/target/a-dental-clinic-backend-0.1.0-SNAPSHOT.jar /app/backend.jar
+COPY deploy/start-api.sh /app/start-api.sh
+RUN chmod 555 /app/start-api.sh
+EXPOSE 8080
+ENTRYPOINT ["/app/start-api.sh"]

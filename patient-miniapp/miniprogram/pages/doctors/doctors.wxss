@@ -1,0 +1,27 @@
+.doctor-card { margin-top: 16rpx; padding: 22rpx; background: #fff; border: 1rpx solid #dcebe7; border-radius: 16rpx; }
+.doctor-line { display: flex; justify-content: space-between; align-items: center; gap: 14rpx; padding: 17rpx 0; border-bottom: 1rpx solid #e7f0ec; }
+.doctor-line:last-of-type { border-bottom: 0; }
+.favorite-actions { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; justify-content: flex-end; }
+.share-doctor { margin: 8rpx 0 0; padding: 0 14rpx; font-size: 21rpx; line-height: 1.8; }
+.doctor-name { font-size: 26rpx; font-weight: 650; color: #1d4943; }
+.doctor-meta { margin-top: 6rpx; font-size: 21rpx; color: #6b8981; }
+.doctor-head { display: flex; justify-content: space-between; align-items: start; }
+.doctor-title { font-size: 29rpx; font-weight: 650; color: #1b423c; }
+.doctor-sub { margin-top: 5rpx; color: #6e8a84; font-size: 22rpx; }
+.doctor-intro { margin-top: 10rpx; color: #476660; font-size: 22rpx; line-height: 1.55; }
+.branch-context { margin: 8rpx 0 14rpx; padding: 11rpx 16rpx; border-radius: 10rpx; background: #eaf6f0; color: #1a6757; font-size: 22rpx; font-weight: 650; }
+.schedule-board { display: flex; margin-top: 18rpx; min-height: 560rpx; border: 1rpx solid #d9e9e3; border-radius: 14rpx; overflow: hidden; background: #fff; }
+.schedule-subjects { flex: none; width: 31%; height: 670rpx; background: #f4faf7; border-right: 1rpx solid #d9e9e3; box-sizing: border-box; }
+.schedule-subject { padding: 22rpx 12rpx; color: #496b63; font-size: 22rpx; line-height: 1.35; overflow-wrap: anywhere; border-bottom: 1rpx solid #e7f0ec; }
+.schedule-subject.active { color: #166b5a; font-weight: 700; background: #e1f4ec; box-shadow: inset 5rpx 0 #258d7e; }
+.schedule-days { flex: 1; min-width: 0; height: 670rpx; padding: 12rpx; box-sizing: border-box; }
+.schedule-day { padding-bottom: 12rpx; border-bottom: 1rpx solid #e4eee9; }
+.schedule-date { position: sticky; top: 0; z-index: 1; padding: 10rpx 4rpx; color: #174e43; font-size: 24rpx; font-weight: 700; background: #fff; }
+.schedule-period { margin: 8rpx 0; color: #647e76; font-size: 20rpx; font-weight: 700; }
+.schedule-no-shift { padding: 6rpx 10rpx; color: #96aaa2; font-size: 19rpx; }
+.schedule-shift { margin-bottom: 9rpx; padding: 12rpx; border: 1rpx solid #d6e9e1; border-radius: 10rpx; background: #fafffc; }
+.schedule-time { color: #155b4d; font-size: 25rpx; font-weight: 750; }
+.schedule-doctor { margin-top: 2rpx; color: #204f46; font-size: 23rpx; font-weight: 650; }
+.schedule-branch { margin-top: 2rpx; color: #6f8880; font-size: 19rpx; overflow-wrap: anywhere; }
+.schedule-status { margin-top: 5rpx; color: #657f77; font-size: 19rpx; }
+.schedule-book { margin: 8rpx 0 0; padding: 0 8rpx; min-height: 54rpx; background: #e5f5ed; color: #176c5b; font-size: 20rpx; line-height: 2.4; border: 0; border-radius: 8rpx; }
